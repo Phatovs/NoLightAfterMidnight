@@ -18,13 +18,16 @@ public class NoLightAfterMidnight : ModuleRules
 			"StateTreeModule",
 			"GameplayStateTreeModule",
 			"UMG",
-			"Slate"
+			"Slate",
+			"SlateCore",
+			"NavigationSystem"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
 
 		PublicIncludePaths.AddRange(new string[] {
 			"NoLightAfterMidnight",
+			"NoLightAfterMidnight/Mechanics",
 			"NoLightAfterMidnight/Variant_Horror",
 			"NoLightAfterMidnight/Variant_Horror/UI",
 			"NoLightAfterMidnight/Variant_Shooter",

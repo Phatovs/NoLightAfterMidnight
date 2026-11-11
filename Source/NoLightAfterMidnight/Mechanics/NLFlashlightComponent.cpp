@@ -1,0 +1,86 @@
+#include "NLFlashlightComponent.h"
+#include "NLDefaults.h"
+#include "Kismet/GameplayStatics.h"
+
+UNLFlashlightComponent::UNLFlashlightComponent()
+{
+	// Varsayılan sesler (Content/Audio/NL)
+	NL_DEFAULT_SOUND(ToggleSound, "flashlight_click");
+	NL_DEFAULT_SOUND(EmptySound, "flash_fail");
+
+	PrimaryComponentTick.bCanEverTick = true;
+	SetIntensity(0.f);
+	SetAttenuationRadius(1600.f);
+	SetInnerConeAngle(12.f);
+	SetOuterConeAngle(26.f);
+	SetLightColor(FLinearColor(1.f, 0.93f, 0.8f));
+}
+
+void UNLFlashlightComponent::BeginPlay()
+{
+	Super::BeginPlay();
+	Battery = FMath::Clamp(StartBattery, 0.f, 100.f);
+	ApplyLight();
+}
+
+void UNLFlashlightComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (!bOn) return;
+
+	Battery = FMath::Max(0.f, Battery - DrainPerSecond * DeltaTime);
+	if (Battery <= 0.f)
+	{
+		bOn = false;
+		UGameplayStatics::PlaySoundAtLocation(this, EmptySound, GetComponentLocation());
+		ApplyLight();
+		return;
+	}
+
+	// Pil azalınca titreme
+	if (GetBatteryPercent() < FlickerThreshold)
+	{
+		FlickerTimer -= DeltaTime;
+		if (FlickerTimer <= 0.f)
+		{
+			FlickerTimer = FMath::FRandRange(0.03f, 0.25f);
+			SetIntensity(OnIntensity * (FMath::FRand() < 0.3f ? 0.05f : FMath::FRandRange(0.4f, 1.f)));
+		}
+	}
+}
+
+void UNLFlashlightComponent::Toggle()
+{
+	if (bDocked || (!bOn && Battery <= 0.f))
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, EmptySound, GetComponentLocation());
+		return;
+	}
+	bOn = !bOn;
+	UGameplayStatics::PlaySoundAtLocation(this, ToggleSound, GetComponentLocation());
+	ApplyLight();
+}
+
+void UNLFlashlightComponent::ForceOff()
+{
+	bOn = false;
+	ApplyLight();
+}
+
+void UNLFlashlightComponent::SetDocked(bool bNewDocked)
+{
+	bDocked = bNewDocked;
+	if (bDocked) bOn = false;
+	ApplyLight();
+}
+
+void UNLFlashlightComponent::AddCharge(float Amount)
+{
+	Battery = FMath::Clamp(Battery + Amount, 0.f, 100.f);
+}
+
+void UNLFlashlightComponent::ApplyLight()
+{
+	SetIntensity(bOn ? OnIntensity : 0.f);
+}

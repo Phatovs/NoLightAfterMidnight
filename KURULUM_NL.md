@@ -124,3 +124,7 @@ Ekstra asset gerekmez, hepsi kodla kurulur:
 - Konsol: `NLDebugDayLength 5` → bundan sonra her gün 5 sn sürer (saat kaldığı yerden devam eder). `NLDebugDayLength 600` ile normale döner.
 - Konsol: `NLDebugEndDayIn 5` → sadece bu gün 5 sn sonra biter.
 - Oyunu kısa günlerle başlatmak: başlatma satırına `-NLDayLength=5` ekle (Editor Preferences > Play > Additional Launch Parameters ya da kısayolun hedefine).
+
+## Arıza çakışması
+Jeneratör arızası ve şalter atması aynı anda olmaz. Biri arızalıyken ya da düzeltildikten sonraki 45 sn içinde diğeri gelmez; sırası gelen arıza bu süre dolana kadar ertelenir (+5–20 sn rastgele). Süre `UNLPowerSubsystem::MinFailureGap`.
+Test: `NLDebugFuseIn 4` + `NLDebugGeneratorIn 6` → şalter atar, jeneratör arızası ertelenir.

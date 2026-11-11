@@ -132,14 +132,14 @@ if RT:
 
 # --- 8 kamera: (kamera konumu, Drowned'ın ayak noktası, yer adı) ---
 CAMS = [
-    (V(-1930, -620, 830),  V(-2250, -950, 500),  "ARŞİV"),
-    (V(-130, -1870, 830),  V(-700, -1550, 500),  "ÜST OFİS"),
-    (V(-150, -1180, 360),  V(-400, -850, 0),     "KORİDOR"),
-    (V(-1100, -1320, 360), V(-1550, -1650, 0),   "DEPO"),
-    (V(-2050, -1320, 360), V(-2350, -1450, 0),   "MERDİVEN"),
-    (V(-2850, 50, 820),    V(-2100, 650, 0),     "LOBİ BATI"),
-    (V(-150, 50, 820),     V(-750, 300, 0),      "LOBİ DOĞU"),
-    (V(-1230, -620, 830),  V(-1550, -1000, 500), "TOPLANTI"),
+    (V(-1930, -620, 830),  V(-2250, -950, 500),  "ARCHIVE"),
+    (V(-130, -1870, 830),  V(-700, -1550, 500),  "UPPER OFFICE"),
+    (V(-150, -1180, 360),  V(-400, -850, 0),     "HALLWAY"),
+    (V(-1100, -1320, 360), V(-1550, -1650, 0),   "STORAGE"),
+    (V(-2050, -1320, 360), V(-2350, -1450, 0),   "STAIRS"),
+    (V(-2850, 50, 820),    V(-2100, 650, 0),     "LOBBY WEST"),
+    (V(-150, 50, 820),     V(-750, 300, 0),      "LOBBY EAST"),
+    (V(-1230, -620, 830),  V(-1550, -1000, 500), "MEETING ROOM"),
 ]
 DROWNED_HALF_HEIGHT = 90.0
 
@@ -209,9 +209,13 @@ can, _ = ensure_one(unreal.NLFuelCan, "NLFuelCan", V(-1500, -1750, 25), rot())
 can.modify()
 set_mesh(comp(can, "Mesh"), CYL, scale=V(0.3, 0.3, 0.5))
 
-# --- Runner: alt katın doğu odası ---
-runner, _ = ensure_one(unreal.NLRunner, "NLRunner", V(-300, -1600, 92), rot(0, 90, 0))
+# --- Runner: alt kat koridorunun doğu ucu (lobiye NavMesh ile bağlı olmalı; alt odalar kapı yüzünden bağlı değil) ---
+RUNNER_HOME = V(-300, -900, 92)
+runner, _ = ensure_one(unreal.NLRunner, "NLRunner", RUNNER_HOME, rot(0, 180, 0))
 runner.modify()
+if (runner.get_actor_location() - RUNNER_HOME).length() > 1:
+    runner.set_actor_location_and_rotation(RUNNER_HOME, rot(0, 180, 0), False, False)
+    log("Runner koridora tasindi")
 rsk = runner.get_components_by_class(unreal.SkeletalMeshComponent)[0]
 rsk.modify()
 if QUINN and not rsk.get_editor_property("skeletal_mesh_asset"):

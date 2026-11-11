@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "NLJumpscareGrab.h"
 #include "NLRunner.generated.h"
 
 class USphereComponent;
@@ -10,6 +11,7 @@ class UAudioComponent;
 class UAnimMontage;
 class USoundBase;
 class ANLPlayerCharacter;
+class UNLBodyRigComponent;
 
 /**
  * Sahneye yerleştirin; konumu "geldiği yer" olarak kaydedilir ve gizli bekler.
@@ -36,6 +38,13 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TObjectPtr<USphereComponent> KillSphere;
 	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TObjectPtr<UAudioComponent> ChaseAudio;
+	// Görünen gövde (GetMesh() görünmez sürücü: koşu animasyonu). Yakalama jumpscare pozu kodla verilir.
+	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TObjectPtr<UNLBodyRigComponent> BodyRig;
+
+	// Yakalama jumpscare ayarları (Boğulmuş ile aynı hareket)
+	UPROPERTY(EditAnywhere, Category = "NL|Jumpscare") float JumpscareDistance = 55.f;
+	UPROPERTY(EditAnywhere, Category = "NL|Jumpscare") float JumpscareLunge = 16.f;
+	UPROPERTY(EditAnywhere, Category = "NL|Jumpscare") float JumpscareCameraShake = 1.6f;
 
 	UPROPERTY(EditAnywhere, Category = "NL|Runner") float ChaseSpeed = 620.f;
 	UPROPERTY(EditAnywhere, Category = "NL|Runner") float ChaseDuration = 20.f;
@@ -61,6 +70,9 @@ private:
 	float RepathTimer = 0.f;
 	FTransform HomeTransform;
 	TWeakObjectPtr<ANLPlayerCharacter> ChaseTarget;
+	FNLJumpscareGrab Grab;
+	float GrabTimer = 0.f;
+	float GrabDuration = 1.5f;
 
 	void SetDormant(bool bDormant);
 	void KillTarget();

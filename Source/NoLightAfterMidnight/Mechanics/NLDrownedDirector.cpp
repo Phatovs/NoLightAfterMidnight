@@ -1,4 +1,5 @@
 #include "NLDrownedDirector.h"
+#include "NLDefaults.h"
 #include "NLDrowned.h"
 #include "NLSecurityDesk.h"
 #include "NLSecurityCamera.h"
@@ -8,6 +9,11 @@
 
 ANLDrownedDirector::ANLDrownedDirector()
 {
+	// İlk kaçırmada çalan uyarı (Content/Audio/NL)
+	NL_DEFAULT_SOUND(MissWarningSound, "drowned_warning");
+	NL_DEFAULT_SOUND(LeaveMapSound, "drowned_leave");
+	NL_DEFAULT_SOUND(ReturnSound, "drowned_return");
+
 	PrimaryActorTick.bCanEverTick = true;
 	DrownedClass = ANLDrowned::StaticClass();
 }
@@ -149,6 +155,7 @@ void ANLDrownedDirector::OnFlinchFinished()
 void ANLDrownedDirector::OnReactionTimeExpired()
 {
 	++MissCount;
+	UE_LOG(LogTemp, Log, TEXT("NLDrowned: light missed (%d / %d) at %.0f s"), MissCount, MissesBeforeAttack, GetWorld()->GetTimeSeconds());
 	if (MissCount >= MissesBeforeAttack)
 	{
 		StartAttack();

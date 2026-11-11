@@ -71,7 +71,18 @@ void ANLGenerator::Tick(float DeltaSeconds)
 			BreakdownTimer -= DeltaSeconds;
 			if (BreakdownTimer <= 0.f)
 			{
-				BreakDown();
+				// Şalter yeni attıysa / hâlâ atıksa şimdi bozulma; arıza aralığı dolunca biraz sonra dene
+				float Wait = 0.f;
+				UNLPowerSubsystem* Power = GetWorld()->GetSubsystem<UNLPowerSubsystem>();
+				if (Power && !Power->CanStartFailure(Wait))
+				{
+					BreakdownTimer = Wait + FMath::FRandRange(5.f, 20.f);
+					UE_LOG(LogTemp, Log, TEXT("NLGenerator: breakdown postponed %.0f s (breaker failure active/recent)"), BreakdownTimer);
+				}
+				else
+				{
+					BreakDown();
+				}
 			}
 		}
 	}
@@ -82,6 +93,12 @@ void ANLGenerator::Tick(float DeltaSeconds)
 		NeedlePos += NeedleDir * NeedleSpeed * DeltaSeconds;
 		if (NeedlePos >= 1.f) { NeedlePos = 1.f; NeedleDir = -1.f; }
 		if (NeedlePos <= 0.f) { NeedlePos = 0.f; NeedleDir = 1.f; }
+	}
+
+	// Bozukken diğer arızalar (şalter) bekler
+	if (bBroken)
+	{
+		if (UNLPowerSubsystem* Power = GetWorld()->GetSubsystem<UNLPowerSubsystem>()) Power->MarkFailureActive();
 	}
 
 	if (bWasProducing != IsProducingPower())
@@ -102,15 +119,40 @@ void ANLGenerator::Interact(ANLPlayerCharacter* Player)
 
 	if (Player->HasFuelCan() && Fuel < MaxFuel)
 	{
-		const bool bWasProducing = IsProducingPower();
-		AddFuel(Player->ConsumeFuelCan());
+		// Oyuncu bidonu kaldırıp jeneratörün üstüne döker; benzin dökülmenin ortasında eklenir
 		UGameplayStatics::PlaySoundAtLocation(this, RefuelSound, GetActorLocation());
 		Player->PlayBodyMontage(PlayerRefuelMontage);
-		if (bWasProducing != IsProducingPower())
+
+		const FVector Pour = GetPourPoint(Player->GetActorLocation());
+		const FRotator Facing(0.f, (GetComponentsBoundingBox().GetCenter() - Player->GetActorLocation()).Rotation().Yaw, 0.f);
+		TWeakObjectPtr<ANLGenerator> WeakThis(this);
+		TWeakObjectPtr<ANLPlayerCharacter> WeakPlayer(Player);
+		Player->PlayHandAction(ENLHandAction::Refuel, Pour, Facing, RefuelActionDuration, 0.6f, [WeakThis, WeakPlayer]()
 		{
-			NotifyPowerChanged(true);
-		}
+			ANLGenerator* Gen = WeakThis.Get();
+			ANLPlayerCharacter* P = WeakPlayer.Get();
+			if (!Gen || !P) return;
+			const bool bWasProducing = Gen->IsProducingPower();
+			Gen->AddFuel(P->ConsumeFuelCan());
+			if (bWasProducing != Gen->IsProducingPower())
+			{
+				Gen->NotifyPowerChanged(true);
+			}
+		});
 	}
+}
+
+FVector ANLGenerator::GetPourPoint(const FVector& From) const
+{
+	// Jeneratörün üstünde, oyuncuya bakan kenarın biraz içinde; bidon kulpu bu yüksekliğe kalkar
+	const FBox Box = GetComponentsBoundingBox();
+	FVector P = Box.GetCenter();
+	FVector ToPlayer = From - P;
+	ToPlayer.Z = 0.f;
+	const float Edge = FMath::Min(Box.GetExtent().X, Box.GetExtent().Y);
+	P += ToPlayer.GetSafeNormal() * FMath::Max(Edge - 10.f, 0.f);
+	P.Z = Box.Max.Z + 28.f;
+	return P;
 }
 
 FText ANLGenerator::GetInteractPrompt(const ANLPlayerCharacter* Player) const
@@ -118,14 +160,14 @@ FText ANLGenerator::GetInteractPrompt(const ANLPlayerCharacter* Player) const
 	if (bBroken)
 	{
 		return IsBeingRepaired()
-			? FText::FromString(TEXT("[SPACE] Tamir et   [E] Bırak"))
-			: FText::FromString(TEXT("[E] Jeneratörü tamir et"));
+			? FText::FromString(TEXT("[SPACE] Repair   [E] Stop"))
+			: FText::FromString(TEXT("[E] Repair generator"));
 	}
 	if (Player && Player->HasFuelCan())
 	{
-		return FText::FromString(TEXT("[E] Benzin doldur"));
+		return FText::FromString(TEXT("[E] Refuel"));
 	}
-	return FText::FromString(FString::Printf(TEXT("Jeneratör - Yakıt: %%%d"), FMath::RoundToInt(GetFuelPercent() * 100.f)));
+	return FText::FromString(FString::Printf(TEXT("Generator - Fuel: %d%%"), FMath::RoundToInt(GetFuelPercent() * 100.f)));
 }
 
 void ANLGenerator::AddFuel(float Amount)
@@ -138,6 +180,8 @@ void ANLGenerator::BreakDown()
 	if (bBroken) return;
 
 	bBroken = true;
+	if (UNLPowerSubsystem* Power = GetWorld()->GetSubsystem<UNLPowerSubsystem>()) Power->MarkFailureActive();
+	UE_LOG(LogTemp, Log, TEXT("NLGenerator: broke down (game time %.0f s)"), GetWorld()->GetTimeSeconds());
 	UGameplayStatics::PlaySoundAtLocation(this, BreakdownSound, GetActorLocation());
 	OnBrokeDown.Broadcast();
 	NotifyPowerChanged(true);

@@ -5,8 +5,9 @@
 UNLFlashlightComponent::UNLFlashlightComponent()
 {
 	// Varsayılan sesler (Content/Audio/NL)
-	NL_DEFAULT_SOUND(ToggleSound, "flashlight_click");
-	NL_DEFAULT_SOUND(EmptySound, "flash_fail");
+	NL_DEFAULT_SOUND(ToggleSound, "flashlight_on");
+	NL_DEFAULT_SOUND(OffSound, "flashlight_off");
+	NL_DEFAULT_SOUND(EmptySound, "flashlight_empty");
 
 	PrimaryComponentTick.bCanEverTick = true;
 	SetIntensity(0.f);
@@ -58,7 +59,7 @@ void UNLFlashlightComponent::Toggle()
 		return;
 	}
 	bOn = !bOn;
-	UGameplayStatics::PlaySoundAtLocation(this, ToggleSound, GetComponentLocation());
+	UGameplayStatics::PlaySoundAtLocation(this, bOn ? ToggleSound.Get() : (OffSound ? OffSound.Get() : ToggleSound.Get()), GetComponentLocation());
 	ApplyLight();
 }
 

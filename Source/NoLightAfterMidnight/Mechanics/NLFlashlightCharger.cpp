@@ -11,7 +11,7 @@ ANLFlashlightCharger::ANLFlashlightCharger()
 {
 	// Varsayılan sesler (Content/Audio/NL)
 	NL_DEFAULT_SOUND(DockSound, "charger_dock");
-	NL_DEFAULT_SOUND(UndockSound, "charger_dock");
+	NL_DEFAULT_SOUND(UndockSound, "charger_undock");
 	NL_DEFAULT_SOUND(FullSound, "charge_full");
 
 	PrimaryActorTick.bCanEverTick = true;
@@ -49,19 +49,37 @@ void ANLFlashlightCharger::Interact(ANLPlayerCharacter* Player)
 {
 	if (!Player) return;
 	UNLFlashlightComponent* PlayerLight = Player->GetFlashlight();
+	TWeakObjectPtr<ANLFlashlightCharger> WeakThis(this);
+
+	// Fener istasyonun üstünde yatar; oyuncu sağ eliyle oraya uzanır, el değdiği anda takılır/alınır
+	const FBox Box = GetComponentsBoundingBox();
+	const FVector DockPoint(Box.GetCenter().X, Box.GetCenter().Y, Box.Max.Z + 3.f);
+	const FRotator DockRotation(0.f, GetActorRotation().Yaw, 0.f);
 
 	if (DockedFlashlight.IsValid())
 	{
-		DockedFlashlight->SetDocked(false);
-		DockedFlashlight.Reset();
-		UGameplayStatics::PlaySoundAtLocation(this, UndockSound, GetActorLocation());
+		Player->PlayHandAction(ENLHandAction::TakeFlashlight, DockPoint, DockRotation, HandActionDuration, 0.5f, [WeakThis]()
+		{
+			ANLFlashlightCharger* Self = WeakThis.Get();
+			if (!Self || !Self->DockedFlashlight.IsValid()) return;
+			Self->DockedFlashlight->SetDocked(false);
+			Self->DockedFlashlight.Reset();
+			UGameplayStatics::PlaySoundAtLocation(Self, Self->UndockSound, Self->GetActorLocation());
+		});
 	}
 	else if (PlayerLight)
 	{
-		PlayerLight->SetDocked(true);
-		DockedFlashlight = PlayerLight;
-		bWasFull = PlayerLight->GetBatteryPercent() >= 1.f;
-		UGameplayStatics::PlaySoundAtLocation(this, DockSound, GetActorLocation());
+		TWeakObjectPtr<UNLFlashlightComponent> WeakLight(PlayerLight);
+		Player->PlayHandAction(ENLHandAction::DockFlashlight, DockPoint, DockRotation, HandActionDuration, 0.55f, [WeakThis, WeakLight]()
+		{
+			ANLFlashlightCharger* Self = WeakThis.Get();
+			UNLFlashlightComponent* Light = WeakLight.Get();
+			if (!Self || !Light) return;
+			Light->SetDocked(true);
+			Self->DockedFlashlight = Light;
+			Self->bWasFull = Light->GetBatteryPercent() >= 1.f;
+			UGameplayStatics::PlaySoundAtLocation(Self, Self->DockSound, Self->GetActorLocation());
+		});
 	}
 }
 
@@ -69,11 +87,11 @@ FText ANLFlashlightCharger::GetInteractPrompt(const ANLPlayerCharacter* Player) 
 {
 	if (DockedFlashlight.IsValid())
 	{
-		return FText::FromString(FString::Printf(TEXT("[E] Feneri al (Pil: %%%d)%s"),
+		return FText::FromString(FString::Printf(TEXT("[E] Take flashlight (Battery: %d%%)%s"),
 			FMath::RoundToInt(DockedFlashlight->GetBatteryPercent() * 100.f),
-			PowerConsumer->IsPowered() ? TEXT("") : TEXT(" - ELEKTRİK YOK")));
+			PowerConsumer->IsPowered() ? TEXT("") : TEXT(" - NO POWER")));
 	}
-	return FText::FromString(TEXT("[E] Feneri şarja tak"));
+	return FText::FromString(TEXT("[E] Dock flashlight to charge"));
 }
 
 void ANLFlashlightCharger::UpdateIndicator()

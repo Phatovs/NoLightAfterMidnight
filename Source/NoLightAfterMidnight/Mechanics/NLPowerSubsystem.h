@@ -31,12 +31,23 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "NL|Power")
 	ANLGenerator* GetGenerator() const { return Generator.Get(); }
+	ANLFuseBox* GetFuseBox() const { return FuseBox.Get(); }
 
 	UPROPERTY(BlueprintAssignable, Category = "NL|Power")
 	FNLOnPowerChanged OnPowerChanged;
+
+	// --- Arıza kuralı: jeneratör arızası ve şalter atması aynı anda olmaz ---
+	// Bir arıza sürerken (ya da bittikten sonra MinFailureGap sn boyunca) yenisi başlamaz.
+	float MinFailureGap = 45.f;
+
+	// Arızalı olan (bozuk jeneratör / atmış şalter) her karede çağırır
+	void MarkFailureActive();
+	// Yeni arıza başlayabilir mi? Başlayamıyorsa kaç sn beklemesi gerektiğini OutWait'e yazar.
+	bool CanStartFailure(float& OutWait) const;
 
 private:
 	TWeakObjectPtr<ANLGenerator> Generator;
 	TWeakObjectPtr<ANLFuseBox> FuseBox;
 	bool bHasPower = false;
+	float LastFailureTime = -1000.f;
 };

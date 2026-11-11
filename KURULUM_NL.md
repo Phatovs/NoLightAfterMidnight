@@ -79,3 +79,48 @@ Ekstra asset gerekmez, hepsi kodla kurulur:
 | SPACE | Masada: aktif kameranın ışığını yakar. Jeneratörde: tamir vuruşu |
 | A/D, ←/→, 1-8 | Masada kamera değiştir |
 | F | Fener |
+
+## Test komutları
+- Oyun sırasında konsolu (`~` tuşu) açıp `NLDebugRunner` yazarsan Runner hemen oyuncuyu kovalamaya başlar.
+- `NLDebugFuseIn 5`: şalter 5 sn sonra kendiliğinden atar. `NLDebugTimeScale 20`: oyun zamanı 20 kat hızlanır.
+- Runner'ın konumu oyuncuya NavMesh üzerinden bağlı olmalı. Alt kattaki odalar kapı yüzünden lobiye bağlı değil, o yüzden Runner koridorun doğu ucunda duruyor. Yeşil NavMesh alanını görmek için editörde **P** tuşuna bas.
+
+## Oyuncu gövdesi ve pozlar
+- Oyuncunun gövdesi artık görünüyor (UE mankeni, kafa gizli). Görünmeyen bir "sürücü" mesh yürüme animasyonunu oynatıyor, görünen gövde (`BodyRig`) bu pozu kopyalayıp kodla büküyor. Animasyon asset'i gerekmiyor.
+- **Fener** sağ elde: kapalıyken kalça yanında aşağı bakar, açınca göğüs önüne kalkar ve bakılan yöne tutulur. Işık fenerin ucundan çıkar. Şarja takılıyken elde görünmez.
+- **Benzin bidonu:** E'ye basınca karakter eğilir, sol eliyle alır ve taşır. Bidon jeneratöre dökülünce kaybolur.
+- **Masa:** Karakter sandalyeye yürür, oturur, ellerini masaya koyar ve monitöre bakar. Kamera ekranı oturma bitince açılır. Kalkarken tersini yapar.
+- Ayarlar: oyuncunun Details panelinde **NL|Body** (oturma, eğilme süreleri, gövde ofseti) ve BodyRig'in **NL|Body** (göz konumu) bölümleri.
+- Pozları kontrol etmek için konsola `NLDebugShots` yaz: fener, eğilme, taşıma ve oturma pozlarının ekran görüntüleri `Saved/Screenshots` klasörüne alınır.
+- **El hareketleri:** Şalterde el kolu tutup çeker (kol çekildiği anda döner). Şarj istasyonunda fener istasyonun üstüne bırakılır ya da oradan alınır. Jeneratörde bidon iki elle kaldırılıp eğilerek dökülür (benzin dökülmenin ortasında eklenir). Süreler: NLFuseBox **Switch Action Duration**, NLFlashlightCharger **Hand Action Duration**, NLGenerator **Refuel Action Duration**.
+- **Masadan kalkma:** Ellerini masaya bastırıp öne eğilir, doğrulur ve bir adım geri çekilir (**Stand Duration**, **Stand Step Back**).
+
+## Şalter arızası
+Şalter gün içinde 2–4 dakikada bir kendiliğinden atar ve tüm elektrik gider. Ekranda "FUSE TRIPPED! RESET THE BREAKER" yazar, oyuncu şaltere gidip E ile kolu kaldırır. Ayarlar NLFuseBox'ta **Random Trips**, **Min/Max Trip Interval** (saniye). Sayaç sadece gün sürerken ve şalter açıkken ilerler, şalter tekrar açılınca baştan başlar.
+
+## Boğulmuş: ışık tutulmazsa
+Üst üste **2 kez** ışık tutulmazsa saldırır (NLDrownedDirector > **Misses Before Attack**). İlk kaçırmada çığlık sesiyle uyarır ve başka kameraya geçer. Başarılı bir ışık sayacı sıfırlar.
+
+## Şalter kolu ve ek sesler
+- Şalter kolu kutunun önünden çıkar: **açıkken yukarı, kapalıyken aşağı** bakar ve yumuşakça döner. Mafsal yeri ve açılar NLFuseBox'ta **Lever Pivot / Lever On Angle / Lever Off Angle**.
+- Olaylara özel sesler `Scripts/nl_make_sounds.py` ile üretildi: `flashlight_on/off/empty`, `fuse_trip`, `charger_undock`, `drowned_warning/leave/return`, `runner_retreat`, `chair_sit/stand`, `player_death`. Gerçek kayıtlarla aynı isimle değiştirilebilir.
+- `NLDebugShots2`: şalter kolu (açık / attı / tekrar açık) ve yürürken fener tutan elin ekran görüntülerini alır.
+
+## Boğulmuş pozları
+- Montaj atanmamışsa pozlar kodla verilir: ışık yiyince **iki eliyle yüzünü siper edip geriye eğilir ve titrer**, sonra **arkasını dönüp uzaklaşır**, jumpscare'de **kollarını iki yana açıp kameranın iki yanını kavrar, yüzünü öne atar; tutarken eller titrer ve oyuncunun bakışı sarsılır**. Gerçek montaj atarsan (Cover Face / Flee / Jumpscare) o oynar.
+- Ayarlar: NLDrowned > **Flinch Lean Back**, **Flee Distance**, **Fallback Cover Face / Flee Duration**, **Jumpscare Lunge** (yüzün ne kadar yaklaştığı), **Jumpscare Camera Shake** (bakış sarsıntısı).
+- Kaybolunca haritanın altına taşınır; böylece ışıkta gölgesi geride kalmaz.
+- `NLDebugShots3`: güvenlik kamerasının gözünden belirme, yüz siperi, kaçış, kaybolma ve jumpscare görüntülerini alır.
+
+## Runner jumpscare
+- Runner yakalayınca Boğulmuş ile **aynı yakalama jumpscare'i** oynar: kameranın önüne atılır, kollarını iki yana açıp kameranın iki yanını kavrar, yüzünü öne atar, bakış sarsılır. Ortak kod: `NLJumpscareGrab`.
+- Yakalanma anında oyuncu yere ya da tavana bakıyorsa bakış yataya düzeltilir, yüz hep tam karşıda olur (Boğulmuş için de geçerli).
+- Runner'ın görünen gövdesi de artık `BodyRig`: koşarken kolları serbestçe sallanır. Gizlenince haritanın altına taşınır (gölge kalmaz).
+- Ayarlar: NLRunner > **Jumpscare Distance / Lunge / Camera Shake**. Kill Montage atarsan onun yerine o oynar.
+- `NLDebugShots4`: Runner kovalaması ve yakalama görüntüleri.
+
+## Sunum: günü kısaltma
+- **F9** (oyun sırasında): bu gün 5 sn sonra biter, "DAY 2" geçişi gösterilir. Sadece geliştirme sürümünde çalışır, paketlenmiş oyunda kapalıdır.
+- Konsol: `NLDebugDayLength 5` → bundan sonra her gün 5 sn sürer (saat kaldığı yerden devam eder). `NLDebugDayLength 600` ile normale döner.
+- Konsol: `NLDebugEndDayIn 5` → sadece bu gün 5 sn sonra biter.
+- Oyunu kısa günlerle başlatmak: başlatma satırına `-NLDayLength=5` ekle (Editor Preferences > Play > Additional Launch Parameters ya da kısayolun hedefine).

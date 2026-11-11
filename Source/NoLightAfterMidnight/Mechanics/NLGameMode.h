@@ -30,7 +30,32 @@ public:
 	void TriggerGameOver(ENLGameOverReason Reason, float ScreenDelay = 1.f);
 
 	// Jeneratör tamirinde hata yapılınca çağrılır
+	UFUNCTION(BlueprintCallable, Category = "NL|Game")
 	void RequestRunnerChase(ANLPlayerCharacter* Target);
+
+	// Test: konsola "NLDebugRunner" yaz -> Runner hemen oyuncuyu kovalar
+	UFUNCTION(Exec)
+	void NLDebugRunner();
+
+	// Test: konsola "NLDebugTimeScale 20" yaz -> oyun zamanı 20 kat hızlanır (arıza/şalter zamanlamasını denemek için)
+	UFUNCTION(Exec)
+	void NLDebugTimeScale(float Scale);
+
+	// Sunum: konsola "NLDebugDayLength 5" yaz -> bundan sonra her gün 5 sn sürer (saat kaldığı yerden devam eder)
+	UFUNCTION(Exec)
+	void NLDebugDayLength(float Seconds);
+
+	// Sunum: "NLDebugEndDayIn 5" -> bu gün 5 sn sonra biter (F9 kısayolu da bunu yapar)
+	UFUNCTION(Exec)
+	void NLDebugEndDayIn(float Seconds);
+
+	// Test: konsola "NLDebugFuseIn 5" yaz -> şalter 5 sn sonra kendiliğinden atar
+	UFUNCTION(Exec)
+	void NLDebugFuseIn(float Seconds);
+
+	// Test: "NLDebugGeneratorIn 5" -> jeneratör 5 sn sonra bozulur (şalter arızasıyla çakışma kuralını denemek için)
+	UFUNCTION(Exec)
+	void NLDebugGeneratorIn(float Seconds);
 
 	UPROPERTY(BlueprintAssignable, Category = "NL|Game") FNLOnDayEvent OnDayStarted;
 	UPROPERTY(BlueprintAssignable, Category = "NL|Game") FNLOnDayEvent OnDayEnded;

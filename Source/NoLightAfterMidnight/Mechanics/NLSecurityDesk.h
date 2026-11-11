@@ -47,6 +47,12 @@ public:
 	const TArray<TObjectPtr<ANLSecurityCamera>>& GetCameras() const { return Cameras; }
 	FTransform GetSeatTransform() const;
 	float GetViewBlendTime() const { return ViewBlendTime; }
+
+	// Oturma pozu için: kalçanın sandalyedeki yeri, zemin, masa yüksekliği ve bakılacak monitör
+	FVector GetSitPelvisLocation() const;
+	float GetFloorZ() const { return GetActorLocation().Z; }
+	float GetDeskSurfaceHeight() const { return DeskSurfaceHeight; }
+	FVector GetMonitorLocation() const;
 	UTextureRenderTarget2D* GetFeedRenderTarget() const { return FeedRenderTarget; }
 
 	void OnPlayerSeated();
@@ -63,6 +69,12 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TObjectPtr<UStaticMeshComponent> MonitorMesh;
 	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TObjectPtr<UCameraComponent> ViewCamera;
 	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TObjectPtr<UArrowComponent> SeatPoint;
+	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TObjectPtr<UStaticMeshComponent> ChairSeat;
+	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TObjectPtr<UStaticMeshComponent> ChairBack;
+
+	// Sandalye oturağının zeminden yüksekliği ve masa üstü yüksekliği (cm)
+	UPROPERTY(EditAnywhere, Category = "NL|Desk") float SeatHeight = 48.f;
+	UPROPERTY(EditAnywhere, Category = "NL|Desk") float DeskSurfaceHeight = 76.f;
 	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TObjectPtr<UAudioComponent> MonitorAudio;
 	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TObjectPtr<UNLPowerConsumerComponent> PowerConsumer;
 

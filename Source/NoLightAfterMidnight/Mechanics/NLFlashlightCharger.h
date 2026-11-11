@@ -39,6 +39,8 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "NL|Audio") TObjectPtr<USoundBase> DockSound;
 	UPROPERTY(EditAnywhere, Category = "NL|Audio") TObjectPtr<USoundBase> UndockSound;
 	UPROPERTY(EditAnywhere, Category = "NL|Audio") TObjectPtr<USoundBase> FullSound;
+	// Feneri takma/alma hareketinin süresi (sn)
+	UPROPERTY(EditAnywhere, Category = "NL|Animation") float HandActionDuration = 1.2f;
 
 private:
 	TWeakObjectPtr<UNLFlashlightComponent> DockedFlashlight;

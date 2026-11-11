@@ -52,8 +52,8 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "NL|Timing") float AwayDuration = 120.f;
 
 	UPROPERTY(EditAnywhere, Category = "NL|Rules") int32 EscapesBeforeLeaving = 3;
-	// Kaç kez ışık tutulmazsa saldırır. 1 = ilk kaçırmada game over.
-	UPROPERTY(EditAnywhere, Category = "NL|Rules", meta = (ClampMin = "1")) int32 MissesBeforeAttack = 1;
+	// Üst üste kaç kez ışık tutulmazsa saldırır. 2 = ilk kaçırmada uyarı sesi + başka kameraya geçer, ikincide saldırır. Başarılı ışık sayacı sıfırlar.
+	UPROPERTY(EditAnywhere, Category = "NL|Rules", meta = (ClampMin = "1")) int32 MissesBeforeAttack = 2;
 	// Saldırı animasyonundan sonra game over ekranına geçiş
 	UPROPERTY(EditAnywhere, Category = "NL|Rules") float ExtraDelayAfterJumpscare = 0.3f;
 

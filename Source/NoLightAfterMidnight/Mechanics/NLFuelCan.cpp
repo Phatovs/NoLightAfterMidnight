@@ -24,7 +24,7 @@ void ANLFuelCan::Interact(ANLPlayerCharacter* Player)
 {
 	if (!CanInteract(Player)) return;
 
-	Player->PickupFuelCan(FuelAmount);
+	Player->PickupFuelCan(FuelAmount, GetComponentsBoundingBox().GetCenter() + FVector(0.f, 0.f, GetComponentsBoundingBox().GetExtent().Z));
 	Player->PlayBodyMontage(PlayerPickupMontage);
 	UGameplayStatics::PlaySoundAtLocation(this, PickupSound, GetActorLocation());
 	SetAvailable(false);
@@ -38,8 +38,8 @@ void ANLFuelCan::Interact(ANLPlayerCharacter* Player)
 FText ANLFuelCan::GetInteractPrompt(const ANLPlayerCharacter* Player) const
 {
 	if (!bAvailable) return FText::GetEmpty();
-	if (Player && Player->HasFuelCan()) return FText::FromString(TEXT("Zaten bir bidon taşıyorsun"));
-	return FText::FromString(TEXT("[E] Benzin bidonunu al"));
+	if (Player && Player->HasFuelCan()) return FText::FromString(TEXT("You are already carrying a fuel can"));
+	return FText::FromString(TEXT("[E] Pick up fuel can"));
 }
 
 void ANLFuelCan::SetAvailable(bool bNewAvailable)

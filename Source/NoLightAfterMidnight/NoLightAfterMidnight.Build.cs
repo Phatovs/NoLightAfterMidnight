@@ -20,7 +20,8 @@ public class NoLightAfterMidnight : ModuleRules
 			"UMG",
 			"Slate",
 			"SlateCore",
-			"NavigationSystem"
+			"NavigationSystem",
+			"AnimationCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

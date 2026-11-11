@@ -6,6 +6,7 @@
 #include "NLGenerator.h"
 #include "NLFlashlightComponent.h"
 #include "NLPowerSubsystem.h"
+#include "NLFuseBox.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
@@ -93,7 +94,7 @@ void UNLHUDWidget::BuildDefaultLayout()
 		NoPowerPanel = NoPower;
 
 		UTextBlock* T = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("NoPowerText"));
-		T->SetText(FText::FromString(TEXT("SİNYAL YOK\nELEKTRİK KESİK")));
+		T->SetText(FText::FromString(TEXT("NO SIGNAL\nPOWER OUT")));
 		T->SetJustification(ETextJustify::Center);
 		FSlateFontInfo F = T->GetFont(); F.Size = 32; T->SetFont(F);
 		T->SetColorAndOpacity(FSlateColor(FLinearColor(0.35f, 0.35f, 0.35f)));
@@ -101,13 +102,11 @@ void UNLHUDWidget::BuildDefaultLayout()
 	}
 
 	// ---- Her zaman görünenler ----
-	DayText   = MakeText(Root, TEXT("DayText"), TEXT("GECE 1 / 7"), 20, FVector2D(1, 0), FVector2D(1, 0), FVector2D(-70, 100), Dim);
-	ClockText = MakeText(Root, TEXT("ClockText"), TEXT("12:00 AM"), 26, FVector2D(1, 0), FVector2D(1, 0), FVector2D(-70, 125));
+	// Gece ve saat yürürken gösterilmez (kamera ekranında var). Yazılı "FLASHLIGHT" etiketi de yok, sadece pil barı.
 	GeneratorStatusText = MakeText(Root, TEXT("GeneratorStatusText"), TEXT(""), 24, FVector2D(0.5f, 0), FVector2D(0.5f, 0), FVector2D(0, 60), Red);
 	InteractPromptText  = MakeText(Root, TEXT("InteractPromptText"), TEXT(""), 20, FVector2D(0.5f, 0.6f), FVector2D(0.5f, 0.5f), FVector2D::ZeroVector);
-	FuelCanText = MakeText(Root, TEXT("FuelCanText"), TEXT("Benzin bidonu taşıyorsun"), 16, FVector2D(0, 1), FVector2D(0, 1), FVector2D(40, -60), Dim);
-	FlashlightLabel = MakeText(Root, TEXT("FlashlightLabel"), TEXT("FENER [F]"), 14, FVector2D(0, 1), FVector2D(0, 1), FVector2D(40, -32), Dim);
-	FlashlightBar = MakeBar(Root, TEXT("FlashlightBar"), FVector2D(0, 1), FVector2D(0, 1), FVector2D(130, -34), FVector2D(160, 12), FLinearColor(1.f, 0.85f, 0.4f));
+	FuelCanText = MakeText(Root, TEXT("FuelCanText"), TEXT("Carrying fuel can"), 16, FVector2D(0, 1), FVector2D(0, 1), FVector2D(40, -60), Dim);
+	FlashlightBar = MakeBar(Root, TEXT("FlashlightBar"), FVector2D(0, 1), FVector2D(0, 1), FVector2D(40, -34), FVector2D(160, 12), FLinearColor(1.f, 0.85f, 0.4f));
 
 	// ---- Tamir mini oyunu ----
 	{
@@ -115,7 +114,7 @@ void UNLHUDWidget::BuildDefaultLayout()
 		PlaceOnCanvas(Root, Repair, FVector2D(0.5f, 0.75f), FVector2D(0.5f, 0.5f), FVector2D::ZeroVector, FVector2D(RepairTrackWidth, 90), false);
 		RepairPanel = Repair;
 
-		MakeText(Repair, TEXT("RepairLabel"), TEXT("TAMİR EDİLİYOR...  yeşil bölgede [SPACE]"), 18, FVector2D(0, 0), FVector2D(0, 0), FVector2D(0, 0));
+		MakeText(Repair, TEXT("RepairLabel"), TEXT("REPAIRING...  press [SPACE] in the green zone"), 18, FVector2D(0, 0), FVector2D(0, 0), FVector2D(0, 0));
 
 		UImage* Track = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RepairTrack"));
 		Track->SetColorAndOpacity(FLinearColor(0.1f, 0.1f, 0.1f, 0.9f));
@@ -293,7 +292,7 @@ void UNLHUDWidget::BuildCameraLayout(UCanvasPanel* Root)
 		CameraMapText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("CameraMapText"));
 		CameraMapText->SetFont(CCTVFont(16));
 		CameraMapText->SetColorAndOpacity(FSlateColor(FLinearColor(0.8f, 0.8f, 0.8f, 1.f)));
-		CameraMapText->SetText(FText::FromString(TEXT("GECE 1/7")));
+		CameraMapText->SetText(FText::FromString(TEXT("NIGHT 1/7")));
 		MapBox->SetContent(CameraMapText);
 	}
 
@@ -337,7 +336,7 @@ void UNLHUDWidget::BuildCameraLayout(UCanvasPanel* Root)
 			BatterySegments.Add(MakeRect(Battery, *FString::Printf(TEXT("BatterySeg%d"), i), FVector2D(6 + i * 10.75f, 6), FVector2D(8.5f, 14), White));
 		}
 
-		FuelPercentText = MakeText(Cam, TEXT("FuelPercentText"), TEXT("%100"), 18, FVector2D(0, 1), FVector2D(0, 1), FVector2D(120, -36), White);
+		FuelPercentText = MakeText(Cam, TEXT("FuelPercentText"), TEXT("100%"), 18, FVector2D(0, 1), FVector2D(0, 1), FVector2D(120, -36), White);
 		FuelPercentText->SetFont(CCTVFont(18));
 	}
 
@@ -346,7 +345,7 @@ void UNLHUDWidget::BuildCameraLayout(UCanvasPanel* Root)
 	FeedTimestampText->SetFont(CCTVFont(30));
 
 	// --- Alt orta: kontroller ---
-	UTextBlock* Help = MakeText(Cam, TEXT("CamHelp"), TEXT("[A/D] KAMERA  [1-8] SEÇ  [SPACE] IŞIK  [E] KALK"), 13,
+	UTextBlock* Help = MakeText(Cam, TEXT("CamHelp"), TEXT("[A/D] CAMERA  [1-8] SELECT  [SPACE] LIGHT  [E] STAND UP"), 13,
 		FVector2D(0.5f, 1), FVector2D(0.5f, 1), FVector2D(0, -34), FLinearColor(0.7f, 0.7f, 0.7f, 0.55f));
 	Help->SetFont(CCTVFont(13));
 }
@@ -418,7 +417,7 @@ void UNLHUDWidget::TickCameraOverlay(const FGeometry& MyGeometry, float InDeltaT
 	// Sağ üst: gece + kamera ızgarası, aktif olan [ ] içinde
 	if (CameraMapText && Desk)
 	{
-		FString Map = GM ? FString::Printf(TEXT("GECE %d/%d\n"), FMath::Max(1, GM->GetCurrentDay()), GM->GetTotalDays()) : FString();
+		FString Map = GM ? FString::Printf(TEXT("NIGHT %d/%d\n"), FMath::Max(1, GM->GetCurrentDay()), GM->GetTotalDays()) : FString();
 		const int32 Num = Desk->GetCameras().Num();
 		for (int32 i = 0; i < Num; ++i)
 		{
@@ -451,7 +450,7 @@ void UNLHUDWidget::TickCameraOverlay(const FGeometry& MyGeometry, float InDeltaT
 			const bool bOn = i < Lit && !bBlinkOff;
 			BatterySegments[i]->SetColorAndOpacity(bOn ? FLinearColor(0.92f, 0.92f, 0.92f, 1.f) : FLinearColor(1.f, 1.f, 1.f, 0.08f));
 		}
-		if (FuelPercentText) FuelPercentText->SetText(FText::FromString(FString::Printf(TEXT("%%%d"), FMath::RoundToInt(Fuel * 100.f))));
+		if (FuelPercentText) FuelPercentText->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt(Fuel * 100.f))));
 		if (FuelBar) FuelBar->SetPercent(Fuel);
 	}
 
@@ -512,7 +511,7 @@ void UNLHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 	// --- Gün & saat ---
 	if (GM)
 	{
-		if (DayText) DayText->SetText(FText::FromString(FString::Printf(TEXT("GECE %d / %d"), FMath::Max(1, GM->GetCurrentDay()), GM->GetTotalDays())));
+		if (DayText) DayText->SetText(FText::FromString(FString::Printf(TEXT("NIGHT %d / %d"), FMath::Max(1, GM->GetCurrentDay()), GM->GetTotalDays())));
 		int32 H = 0, M = 0;
 		if (ClockText && GetClock(H, M))
 		{
@@ -533,14 +532,16 @@ void UNLHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 	// Masadayken yürüme arayüzü gizlenir; saat/gece kamera ekranında gösterilir
 	SetShown(DayText, !bSeated);
 	SetShown(ClockText, !bSeated);
-	SetShown(FlashlightBar, !bSeated);
+	// Fener pili sadece fener açıkken görünür
+	SetShown(FlashlightBar, !bSeated && Player->GetFlashlight() && Player->GetFlashlight()->IsOn());
 	SetShown(FlashlightLabel, !bSeated);
 
 	// --- Kamera arayüzü ---
-	SetShown(CameraPanel, bSeated && bHasPower);
-	SetShown(NoPowerPanel, bSeated && !bHasPower);
+	const bool bAtMonitor = Player->IsAtMonitor();
+	SetShown(CameraPanel, bAtMonitor && bHasPower);
+	SetShown(NoPowerPanel, bAtMonitor && !bHasPower);
 
-	if (bSeated && bHasPower)
+	if (bAtMonitor && bHasPower)
 	{
 		const ANLSecurityDesk* Desk = Player->GetCurrentDesk();
 
@@ -566,11 +567,12 @@ void UNLHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 		FString Status;
 		if (Generator)
 		{
-			if (Generator->IsBroken()) Status = TEXT("JENERATÖR ARIZALI!");
-			else if (Generator->GetFuelPercent() <= 0.f) Status = TEXT("BENZİN BİTTİ!");
-			else if (Generator->GetFuelPercent() < 0.15f) Status = TEXT("BENZİN AZALIYOR");
+			if (Generator->IsBroken()) Status = TEXT("GENERATOR BROKEN!");
+			else if (Generator->GetFuelPercent() <= 0.f) Status = TEXT("OUT OF FUEL!");
+			else if (Generator->GetFuelPercent() < 0.15f) Status = TEXT("FUEL LOW");
 		}
-		if (Status.IsEmpty() && !bHasPower && Generator) Status = TEXT("ELEKTRİK YOK");
+		if (Status.IsEmpty() && Power && Power->GetFuseBox() && Power->GetFuseBox()->IsTripped()) Status = TEXT("FUSE TRIPPED! RESET THE BREAKER");
+		if (Status.IsEmpty() && !bHasPower && Generator) Status = TEXT("NO POWER");
 		GeneratorStatusText->SetText(FText::FromString(Status));
 	}
 
@@ -626,5 +628,5 @@ void UNLHUDWidget::HandleGameOverScreen(ENLGameOverReason Reason)
 
 void UNLHUDWidget::HandleGameWon()
 {
-	ShowCenterMessage(TEXT("FENER SÖNMEDİ.\n7 GECE TAMAMLANDI"), true);
+	ShowCenterMessage(TEXT("THE LIGHT NEVER WENT OUT.\nALL 7 NIGHTS SURVIVED"), true);
 }

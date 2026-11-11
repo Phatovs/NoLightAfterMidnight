@@ -5,6 +5,7 @@
 #include "NLPlayerCharacter.h"
 #include "Camera/CameraComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "Components/ArrowComponent.h"
 #include "Components/AudioComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -18,6 +19,7 @@ ANLSecurityDesk::ANLSecurityDesk()
 	NL_DEFAULT_SOUND(ComputerOnSound, "computer_on");
 	NL_DEFAULT_SOUND(ComputerOffSound, "computer_off");
 	NL_DEFAULT_SOUND(MonitorHumLoop, "monitor_hum_loop");
+	NL_DEFAULT_SOUND(SitDownSound, "chair_sit");
 
 	PrimaryActorTick.bCanEverTick = false;
 
@@ -37,6 +39,22 @@ ANLSecurityDesk::ANLSecurityDesk()
 	SeatPoint = CreateDefaultSubobject<UArrowComponent>(TEXT("SeatPoint"));
 	SeatPoint->SetupAttachment(Root);
 	SeatPoint->SetRelativeLocation(FVector(-90.f, 0.f, 90.f));
+
+	// Basit sandalye (oyuncu içinden geçebilir; oturunca kalça oturağa iner)
+	static ConstructorHelpers::FObjectFinderOptional<UStaticMesh> CubeFinder(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	ChairSeat = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ChairSeat"));
+	ChairSeat->SetupAttachment(Root);
+	ChairSeat->SetStaticMesh(CubeFinder.Get());
+	ChairSeat->SetRelativeLocation(FVector(-76.f, 0.f, SeatHeight - 4.f));
+	ChairSeat->SetRelativeScale3D(FVector(0.46f, 0.46f, 0.08f));
+	ChairSeat->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+
+	ChairBack = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ChairBack"));
+	ChairBack->SetupAttachment(Root);
+	ChairBack->SetStaticMesh(CubeFinder.Get());
+	ChairBack->SetRelativeLocation(FVector(-101.f, 0.f, SeatHeight + 28.f));
+	ChairBack->SetRelativeScale3D(FVector(0.06f, 0.46f, 0.5f));
+	ChairBack->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 
 	MonitorAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("MonitorAudio"));
 	MonitorAudio->SetupAttachment(MonitorMesh);
@@ -88,7 +106,7 @@ void ANLSecurityDesk::Interact(ANLPlayerCharacter* Player)
 
 FText ANLSecurityDesk::GetInteractPrompt(const ANLPlayerCharacter* Player) const
 {
-	return bPlayerSeated ? FText::GetEmpty() : FText::FromString(TEXT("[E] Masaya otur"));
+	return bPlayerSeated ? FText::GetEmpty() : FText::FromString(TEXT("[E] Sit at desk"));
 }
 
 void ANLSecurityDesk::SwitchToCamera(int32 Index)
@@ -176,4 +194,16 @@ void ANLSecurityDesk::RefreshFeed()
 			Cameras[i]->SetFeedActive(i == ActiveIndex && IsPowered(), FeedRenderTarget);
 		}
 	}
+}
+
+FVector ANLSecurityDesk::GetSitPelvisLocation() const
+{
+	FVector P = ChairSeat->GetComponentLocation();
+	P.Z = GetFloorZ() + SeatHeight + 10.f;
+	return P;
+}
+
+FVector ANLSecurityDesk::GetMonitorLocation() const
+{
+	return MonitorMesh->Bounds.Origin;
 }

@@ -38,6 +38,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "NL|Generator")
 	void AddFuel(float Amount);
 
+	// Benzin dökülürken bidonun kaldırılacağı nokta (From: oyuncunun konumu)
+	FVector GetPourPoint(const FVector& From) const;
+
+	// Test için: jeneratör bu kadar sn sonra bozulsun
+	void SetBreakdownTimer(float Seconds) { BreakdownTimer = Seconds; }
+
 	// Jeneratörü hemen arızalandırır (zamanlayıcı da bunu çağırır)
 	UFUNCTION(BlueprintCallable, Category = "NL|Generator")
 	void BreakDown();
@@ -123,6 +129,8 @@ protected:
 	// ---- Oyuncu animasyonları ----
 	UPROPERTY(EditAnywhere, Category = "NL|Animation") TObjectPtr<UAnimMontage> PlayerRepairMontage;
 	UPROPERTY(EditAnywhere, Category = "NL|Animation") TObjectPtr<UAnimMontage> PlayerRefuelMontage;
+	// Benzin dökme hareketinin süresi (sn)
+	UPROPERTY(EditAnywhere, Category = "NL|Animation") float RefuelActionDuration = 2.8f;
 
 private:
 	float Fuel = 0.f;

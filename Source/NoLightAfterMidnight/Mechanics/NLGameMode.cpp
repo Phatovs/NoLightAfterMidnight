@@ -2,10 +2,13 @@
 #include "NLDefaults.h"
 #include "NLPlayerCharacter.h"
 #include "NLRunner.h"
+#include "NLFuseBox.h"
+#include "NLGenerator.h"
 #include "Components/AudioComponent.h"
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
+#include "GameFramework/WorldSettings.h"
 
 ANLGameMode::ANLGameMode()
 {
@@ -23,6 +26,13 @@ ANLGameMode::ANLGameMode()
 void ANLGameMode::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Sunum için: oyunu "-NLDayLength=5" ile başlatınca günler 5 sn sürer
+	float CmdDayLength = 0.f;
+	if (FParse::Value(FCommandLine::Get(), TEXT("NLDayLength="), CmdDayLength) && CmdDayLength > 0.f)
+	{
+		DayLengthSeconds = CmdDayLength;
+	}
 
 	AmbientAudio = UGameplayStatics::SpawnSound2D(this, AmbientLoop);
 
@@ -50,12 +60,14 @@ void ANLGameMode::StartDay(int32 Day)
 	DayTimeRemaining = DayLengthSeconds;
 	bDayActive = true;
 	UGameplayStatics::PlaySound2D(this, DayStartSound);
+	UE_LOG(LogTemp, Log, TEXT("NLGame: DAY %d started (%.0f s long)"), CurrentDay, DayLengthSeconds);
 	OnDayStarted.Broadcast(CurrentDay);
 }
 
 void ANLGameMode::EndDay()
 {
 	bDayActive = false;
+	UE_LOG(LogTemp, Log, TEXT("NLGame: DAY %d ended"), CurrentDay);
 	UGameplayStatics::PlaySound2D(this, DayEndSound);
 	OnDayEnded.Broadcast(CurrentDay);
 
@@ -108,5 +120,54 @@ void ANLGameMode::RequestRunnerChase(ANLPlayerCharacter* Target)
 			It->StartChase(Target);
 			return;
 		}
+	}
+}
+
+void ANLGameMode::NLDebugRunner()
+{
+	ANLPlayerCharacter* Player = Cast<ANLPlayerCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+	UE_LOG(LogTemp, Log, TEXT("NLDebugRunner: player=%s"), *GetNameSafe(Player));
+	RequestRunnerChase(Player);
+}
+
+void ANLGameMode::NLDebugTimeScale(float Scale)
+{
+	const float S = FMath::Clamp(Scale, 0.1f, 50.f);
+	GetWorldSettings()->SetTimeDilation(S);
+	UE_LOG(LogTemp, Log, TEXT("NLDebugTimeScale: %.1fx"), S);
+}
+
+void ANLGameMode::NLDebugFuseIn(float Seconds)
+{
+	for (TActorIterator<ANLFuseBox> It(GetWorld()); It; ++It)
+	{
+		It->SetTripTimer(FMath::Max(Seconds, 0.f));
+		UE_LOG(LogTemp, Log, TEXT("NLDebugFuseIn: breaker will trip in %.1f s"), Seconds);
+	}
+}
+
+void ANLGameMode::NLDebugDayLength(float Seconds)
+{
+	const float NewLength = FMath::Max(Seconds, 1.f);
+	// Saat geri sarmasın: günün ilerleme oranı korunur
+	const float Progress = GetDayProgress();
+	DayLengthSeconds = NewLength;
+	if (bDayActive) DayTimeRemaining = NewLength * (1.f - Progress);
+	UE_LOG(LogTemp, Log, TEXT("NLDebugDayLength: days now last %.1f s"), NewLength);
+}
+
+void ANLGameMode::NLDebugEndDayIn(float Seconds)
+{
+	if (!bDayActive) return;
+	DayTimeRemaining = FMath::Clamp(Seconds, 0.f, DayTimeRemaining);
+	UE_LOG(LogTemp, Log, TEXT("NLDebugEndDayIn: day ends in %.1f s"), DayTimeRemaining);
+}
+
+void ANLGameMode::NLDebugGeneratorIn(float Seconds)
+{
+	for (TActorIterator<ANLGenerator> It(GetWorld()); It; ++It)
+	{
+		It->SetBreakdownTimer(FMath::Max(Seconds, 0.f));
+		UE_LOG(LogTemp, Log, TEXT("NLDebugGeneratorIn: generator will break in %.1f s"), Seconds);
 	}
 }

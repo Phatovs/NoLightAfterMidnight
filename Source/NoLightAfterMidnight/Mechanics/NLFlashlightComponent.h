@@ -38,7 +38,9 @@ protected:
 	// Bu yüzdenin altında titremeye başlar
 	UPROPERTY(EditAnywhere, Category = "NL|Flashlight") float FlickerThreshold = 0.15f;
 
+	// Açma sesi (OffSound boşsa kapamada da çalar)
 	UPROPERTY(EditAnywhere, Category = "NL|Audio") TObjectPtr<USoundBase> ToggleSound;
+	UPROPERTY(EditAnywhere, Category = "NL|Audio") TObjectPtr<USoundBase> OffSound;
 	UPROPERTY(EditAnywhere, Category = "NL|Audio") TObjectPtr<USoundBase> EmptySound;
 
 private:

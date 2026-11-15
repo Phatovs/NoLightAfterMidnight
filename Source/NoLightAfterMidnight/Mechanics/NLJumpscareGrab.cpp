@@ -1,4 +1,5 @@
 #include "NLJumpscareGrab.h"
+#include "Camera/CameraComponent.h"
 #include "NLBodyRigComponent.h"
 #include "AnimationRuntime.h"
 #include "Engine/SkinnedAsset.h"
@@ -19,6 +20,11 @@ void FNLJumpscareGrab::Begin(AActor* Creature, const USkeletalMeshComponent* Ref
 	InVictim->SetControlRotation(View);
 
 	CamLoc = InVictim->PlayerCameraManager->GetCameraLocation();
+	// Kamera yöneticisi bir kare geriden gelir (oyuncu o kare ışınlandıysa yanlış olur): oyuncunun kendi kamerasını kullan
+	if (const APawn* VictimPawn = InVictim->GetPawn())
+	{
+		if (const UCameraComponent* Cam = VictimPawn->FindComponentByClass<UCameraComponent>()) CamLoc = Cam->GetComponentLocation();
+	}
 	BaseRot = View;
 	const FRotator FaceRot(0.f, View.Yaw + 180.f, 0.f);
 

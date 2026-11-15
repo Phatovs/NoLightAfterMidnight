@@ -223,6 +223,19 @@ if QUINN and not rsk.get_editor_property("skeletal_mesh_asset"):
 if ABP:
     rsk.set_editor_property("anim_class", ABP)
 
+# --- Saklanma kapısı: alt kat depo odasının girişi (eski BP_DoorFrame yerine; ileri yön = odanın içi, -Y) ---
+DOOR_POS = V(-1700, -1250, 0)
+for a in eas.get_all_level_actors():
+    if a.get_class().get_name().startswith("BP_DoorFrame") and (a.get_actor_location() - DOOR_POS).length() < 5:
+        log("Kaldirildi: %s (yerine NLHideDoor)" % a.get_actor_label())
+        eas.destroy_actor(a)
+door, _ = ensure_one(unreal.NLHideDoor, "NLHideDoor_Storage", DOOR_POS, rot(0, -90, 0))
+door.modify()
+door.set_actor_location_and_rotation(DOOR_POS, rot(0, -90, 0), False, False)
+door.set_editor_property("opening_width", 300.0)   # kasanın iç kenarları x -1850..-1550
+door.set_editor_property("opening_height", 350.0)
+door.set_editor_property("wall_thickness", 100.0)
+
 # --- NavMesh: binanın tamamı ---
 navs = actors_of(unreal.NavMeshBoundsVolume)
 if not navs:

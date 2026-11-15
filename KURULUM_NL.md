@@ -75,6 +75,7 @@ Ekstra asset gerekmez, hepsi kodla kurulur:
 | Tuş | Ne yapar |
 |---|---|
 | WASD / Fare | Yürü / bak |
+| Shift (basılı) | Koş (stamina harcar) |
 | E | Etkileşim (otur, kalk, tamir et, benzin al/doldur, şalter, fener şarjı) |
 | SPACE | Masada: aktif kameranın ışığını yakar. Jeneratörde: tamir vuruşu |
 | A/D, ←/→, 1-8 | Masada kamera değiştir |
@@ -83,7 +84,7 @@ Ekstra asset gerekmez, hepsi kodla kurulur:
 ## Test komutları
 - Oyun sırasında konsolu (`~` tuşu) açıp `NLDebugRunner` yazarsan Runner hemen oyuncuyu kovalamaya başlar.
 - `NLDebugFuseIn 5`: şalter 5 sn sonra kendiliğinden atar. `NLDebugTimeScale 20`: oyun zamanı 20 kat hızlanır.
-- Runner'ın konumu oyuncuya NavMesh üzerinden bağlı olmalı. Alt kattaki odalar kapı yüzünden lobiye bağlı değil, o yüzden Runner koridorun doğu ucunda duruyor. Yeşil NavMesh alanını görmek için editörde **P** tuşuna bas.
+- Runner'ın konumu oyuncuya NavMesh üzerinden bağlı olmalı. Runner koridorun doğu ucunda duruyor. Yeşil NavMesh alanını görmek için editörde **P** tuşuna bas.
 
 ## Oyuncu gövdesi ve pozlar
 - Oyuncunun gövdesi artık görünüyor (UE mankeni, kafa gizli). Görünmeyen bir "sürücü" mesh yürüme animasyonunu oynatıyor, görünen gövde (`BodyRig`) bu pozu kopyalayıp kodla büküyor. Animasyon asset'i gerekmiyor.
@@ -128,3 +129,61 @@ Ekstra asset gerekmez, hepsi kodla kurulur:
 ## Arıza çakışması
 Jeneratör arızası ve şalter atması aynı anda olmaz. Biri arızalıyken ya da düzeltildikten sonraki 45 sn içinde diğeri gelmez; sırası gelen arıza bu süre dolana kadar ertelenir (+5–20 sn rastgele). Süre `UNLPowerSubsystem::MinFailureGap`.
 Test: `NLDebugFuseIn 4` + `NLDebugGeneratorIn 6` → şalter atar, jeneratör arızası ertelenir.
+
+## Etkileşim işaretleri
+- Etkileşimli her nesnenin (masa, jeneratör, şalter, şarj, bidon) üstünde **7 m**'den itibaren yarı saydam koyu bir yuvarlak belirir; yaklaştıkça netleşir.
+- Nesneye bakınca (E menzilinde) yuvarlak büyür, içinde **E** ve yanında eylem yazısı çıkar ("Switch power off" gibi). Yan yana nesnelerde sadece bakılanda E olur, diğerleri yuvarlak kalır.
+- Bilgi yazılarında ("Generator - Fuel: 50%") E çıkmaz. Duvar arkasındaki, alınmış ya da kullanılamayan nesnelerde işaret görünmez. Masada, tamirde, eğilirken gizlenir.
+- Ayarlar: HUD > **NL|Interact** (Marker Show Distance, Marker Size / Focused Size, Marker Height Offset, Marker Fill).
+- `NLDebugShots5`: uzak/yakın işaretlerin arayüzlü ekran görüntülerini alır.
+
+## Runner: tamir hatası
+- Tamirde hata yapılınca Runner **uzakta** (oyuncudan 12–26 m, tercihen görmediği bir yerde) belirir ve oradan bir çığlık duyulur. Oyuncu **tamirden çıkana kadar bekler**, çıkınca koşmaya başlar.
+- Koşu hızı **250** (oyuncu 280): kaçılabilir, ama durursan ya da sıkışırsan yakalar. Ayarlar: NLRunner > **Chase Speed**, **Spawn Min / Max Distance**.
+- Kovalama **süresiz**: Runner ancak oyuncu bir odaya girip kapıyı kapatınca (aşağıda "Saklanma kapısı") ya da oyuncuyu yakalayınca durur. İstersen NLRunner > **Chase Duration** ile süre koyabilirsin (0 = süresiz).
+- `NLDebugRunnerRepair`: tamir hatası senaryosunu baştan sona dener (log: `NLTest`).
+
+## Sabotajcı
+- Şalterin atması ve jeneratörün bozulması artık görünür bir karakterle oluyor: **Sabotajcı** oyuncunun görmediği bir yerde (hedefe 9–22 m) belirir, **çömelerek sinsice** hedefe yürür, hedefi elleriyle **kurcalar** (alçak hedefte eğilir) ve arıza o sırada olur; sonra **koşarak** görüş dışına kaçıp kaybolur.
+- Sahneye konması gerekmez, ilk ihtiyaçta kendiliğinden oluşur. Koyu renkli manken (MI_Manny_02_New).
+- O iş başındayken diğer arıza başlamaz; arıza çakışma kuralı (45 sn) bittiği andan itibaren sayılır.
+- Hedefe 30 sn içinde ulaşamazsa arızayı yine uygular ve kaybolur (oyun akışı bozulmasın). Yol bulamazsa arıza eskisi gibi hemen olur.
+- Ayarlar (NLSaboteur sınıfı varsayılanları): **Sneak Speed** 150, **Flee Speed** 520, **Tamper Duration** 2.6 sn, **Tamper Reach**, **Spawn Min/Max Distance**, **Sneak Crouch Depth**, **Give Up Time**.
+- Test: `NLDebugFuseIn 1` / `NLDebugGeneratorIn 1` (Sabotajcı gelir), `NLDebugShots6` (yürüme, kurcalama, kaçış görüntüleri).
+
+## Sigorta kutusu
+- Şalter kutusunun paneli sola uzadı: üzerinde 2×2 dizili **4 dikey cam sigorta** (kırmızı, mavi, yeşil, sarı). Her yuvanın arkasındaki renkli plaka, oraya hangi sigortanın gittiğini gösterir.
+- **Elektrik** ancak şalter açık **ve** 4 sigorta da doğru yuvadaysa gelir.
+- **Sabotajcı** artık şalteri indirmez, sigortaların yerini karıştırır; şalteri bazen indirir, bazen açık bırakır (**Sabotage Switch Off Chance**, varsayılan %50).
+- **E** → görüş kutunun **yakın plan kamerasına** kayar (kutudaki loş lamba yanar), fare imleci çıkar. Ayrı bir panel yok: **kutunun üstündeki sigortaya basılı tutup** panelin üstünde sürükle, başka yuvaya bırak → ikisi yer değiştirir (boşa bırakınca yerine döner; sadece tıklamak bir şey yapmaz, renkler doğru olsa da istediğin gibi değiştirebilirsin). **Şalter koluna basılı tutup** fareyi yukarı/aşağı çek: yarıyı geçip bırakınca o tarafa geçer, geçmezse geri döner. Altta sadece kısa bir ipucu satırı var. **E / Esc** ile geri dönülür.
+- **Şalter açıkken sigortaya dokunulursa elektrik çarpar:** kamera hızla oyuncuya döner, ekran mavi-beyaz elektrikle cızırdar ve sallanır (oyuncu > **Shock Duration**, **Shock Shake**).
+- Doğru sıra: şalteri kapat → sigortaları renklerine yerleştir → şalteri aç.
+- `NLDebugFuseUI`: sabotaj, elektrik çarpması ve düzeltmenin ekran görüntülerini alır.
+- `NLDebugFuseMouse`: gerçek fare girişiyle (imleç + sol tuş) sigorta sürükleme, tek tıklama ve şalter kolunu dener.
+
+## Artı ve etkileşim odağı
+- Ekranın ortasında küçük bir **artı** var; etkileşimli bir nesneye bakınca büyür ve parlar. Masada, sigorta kutusunda, tamirde gizlenir.
+- **Odak daha rahat:** Nesnenin görünen sınırına **2,8 m**'den yakınsan ve artı nesnenin üstündeyse ya da ona yakınsa (küçük nesnelerde ~7° pay) E çıkar; dibine girince de çalışır. Arada duvar varsa seçilmez. Birden fazla aday varsa artıya en yakın olan seçilir.
+- Bakılan nesnenin yuvarlağı ekran dışına düşerse (ör. dibindeyken) **E artının hemen üstünde** görünür.
+- Ayarlar: oyuncu > **Interact Distance** (280), **Interact Aim Tolerance** (7°). Test: `NLDebugFocusShots`.
+
+## Saklanma kapısı (Runner'dan kaçış)
+- Alt kattaki depo odasının girişine (eski BP_DoorFrame yerine) **NLHideDoor_Storage** kondu (`nl_setup_scene.py`). Kapının yanı ve üstü dolgu duvarla kapanır, NavMesh kapıdan geçer.
+- **E** ile kapı açılır/kapanır. Runner kovalarken odaya girip kapıyı **içeriden kapatırsan**:
+  - Oyuncu kapıya yaslanır, **kamera kendiliğinden kapı koluna döner**, iki eli kapıda/kolda; **hızlı panik nefesi** (ses + kamera sallanması) başlar. Yürüme ve bakış kilitlenir.
+  - Runner kapının dışına geçer ve **4 kez kapıyı zorlar**: her zorlamada darbe sesi, **kol aşağı basılıp titrer**, kapı aralanıp çarpar, kamera sarsılır ve ekranda **"HOLD THE DOOR!"** çubuğu çıkar. İbre bir kez soldan sağa geçer; **bölgedeyken SPACE**.
+  - **Hepsi başarılı:** Runner bırakıp gider (uzaklaşan adımlar), nefes yavaşça söner, oyuncu serbest kalır.
+  - **Bölge dışında basarsan ya da geç kalırsan:** kapı içeri savrulur, oyuncu geri itilir ve Runner **jumpscare** ile yakalar (karanlıkta yüzü alttan soluk bir ışıkla görünür).
+- Ayarlar: NLHideDoor > **Num Checks** (4), **Settle Time**, **Gap Min / Max**, **Sweep Time** (ibre süresi, her kontrolde **Sweep Speed Up** kadar hızlanır), **Zone Width Start / Min**, **Burst Knockback**; ölçüler **Opening Width / Height**, **Wall Thickness**, **Door Width / Height**. Aktörün ileri oku (+X) odanın **içine** bakmalı.
+- Oyuncu > **Breath Shake** (sallanma, derece) ve **Breath Rate** (nefes/sn).
+- Yeni sesler (`nl_make_sounds.py`): door_open, door_close, door_bang, door_burst, door_handle, breath_panic_loop, breath_exhausted_loop.
+- Test: `NLDebugDoor 1` (kontroller başarılı → Runner gider), `NLDebugDoor 0` (başarısız → kapı kırılır, jumpscare).
+
+## Koşma ve stamina
+- **Shift** basılıyken koşulur: hız **480** (yürüme 280, Runner 250). Tam stamina ile ~**5,5 sn** koşulur.
+- Bırakınca ~0,9 sn sonra dolmaya başlar (dururken daha hızlı). Stamina **biterse** %30'a dolana kadar koşamazsın. Stamina azaldıkça nefes nefese kalma sesi duyulur.
+- **Stamina bitince:** derin, hırıltılı nefes sesi başlar (`breath_exhausted_loop`) ve ekran her nefeste **gri → normal → gri** atar (içe çekişte renk çekilir ve hafif kararır, verişte geri gelir). %30'a dolup tekrar koşabilir hale gelince yavaşça normale döner. Ayarlar: oyuncu > **Exhausted Breath Loop**, **Exhausted Breath Period** (1,1 sn, sesle aynı), **Exhausted Saturation** (0,08).
+- **Sıfırlama cezası:** stamina **tamamen biterse** bar **soluk gri** olur ve stamina **tamamen dolana kadar** daha yavaş dolar (normal hızın %45'i; oyuncu > **Depleted Regen Multiplier**). Bitmeden koşmayı bırakırsan normal hızda dolar. %30'dan sonra yine koşabilirsin ama yavaş dolma tam dolana kadar sürer.
+- **Gösterge (alt orta):** ince, yıpranmış (çizik, düzensiz kenarlı) bir bar; stamina azaldıkça **iki yandan ortaya doğru kapanır**. Doluyken soluk kemik rengi, azaldıkça **griye** döner (kırmızı değil, can gibi durmasın) ve arızalı ışık gibi titrer. Stamina azaldıkça **ekran kenarları kararır** (tünel görüşü) ve nabız gibi atar; tükenince bar söner-yanar ve titrer. Dolu ve koşmuyorsan kaybolur. Tamamen kodla çiziliyor (`NLHUDStamina.cpp`), asset gerekmez.
+- Ayarlar: oyuncu > **Sprint Speed**, **Sprint Duration**, **Stamina Regen Time / Delay**, **Exhausted Recover**, **Panting Loop**.
+- Test: `NLDebugStamina` (Shift ile koşu + %75 / %35 / tükenmiş gösterge görüntüleri).

@@ -117,7 +117,7 @@ void ANLGameMode::RequestRunnerChase(ANLPlayerCharacter* Target)
 	{
 		if (!It->IsChasing())
 		{
-			It->StartChase(Target);
+			It->PrepareChase(Target);
 			return;
 		}
 	}

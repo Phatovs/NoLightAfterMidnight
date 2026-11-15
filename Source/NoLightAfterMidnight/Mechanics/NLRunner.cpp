@@ -14,6 +14,8 @@
 #include "Engine/SkeletalMesh.h"
 #include "NavigationSystem.h"
 #include "NavigationPath.h"
+#include "NLHideDoor.h"
+#include "Components/PointLightComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogNLRunner, Log, All);
 
@@ -56,6 +58,16 @@ ANLRunner::ANLRunner()
 	ChaseAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("ChaseAudio"));
 	ChaseAudio->SetupAttachment(GetCapsuleComponent());
 	ChaseAudio->bAutoActivate = false;
+
+	FaceLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("FaceLight"));
+	FaceLight->SetupAttachment(GetCapsuleComponent());
+	FaceLight->SetRelativeLocation(FVector(38.f, 0.f, 20.f));   // yüzün önü-altı
+	FaceLight->SetIntensityUnits(ELightUnits::Candelas);
+	FaceLight->SetIntensity(6.f);
+	FaceLight->SetAttenuationRadius(140.f);
+	FaceLight->SetLightColor(FLinearColor(0.75f, 0.82f, 1.f));
+	FaceLight->SetCastShadows(false);
+	FaceLight->SetVisibility(false);
 }
 
 void ANLRunner::BeginPlay()
@@ -94,6 +106,25 @@ void ANLRunner::Tick(float DeltaSeconds)
 		return;
 	}
 
+	// Kapının dışında zorluyor (kapı aktörü yönetir)
+	if (bDoorAssault) return;
+
+	// Bekliyor: oyuncu tamirden (ya da başka bir işten) çıkınca koşmaya başla
+	if (bPendingChase)
+	{
+		ANLPlayerCharacter* Waiting = ChaseTarget.Get();
+		if (!Waiting || Waiting->GetMode() == ENLPlayerMode::Dead)
+		{
+			bPendingChase = false;
+			ChaseTarget.Reset();
+		}
+		else if (Waiting->GetMode() != ENLPlayerMode::Repairing)
+		{
+			StartChase(Waiting, PendingSpawn);
+		}
+		return;
+	}
+
 	if (!bChasing) return;
 
 	ANLPlayerCharacter* Target = ChaseTarget.Get();
@@ -124,26 +155,70 @@ void ANLRunner::Tick(float DeltaSeconds)
 	}
 
 	ChaseTimer -= DeltaSeconds;
-	if (ChaseTimer <= 0.f)
+	if (ChaseDuration > 0.f && ChaseTimer <= 0.f)
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, RetreatSound, GetActorLocation());
 		StopChase();
 	}
 }
 
-void ANLRunner::StartChase(ANLPlayerCharacter* Target)
+void ANLRunner::PrepareChase(ANLPlayerCharacter* Target)
+{
+	if (bChasing || bPendingChase || !Target) return;
+
+	ChaseTarget = Target;
+	bPendingChase = true;
+	PendingSpawn = FindSpawnPoint(Target);
+	// Uzaktan gelen çığlık: geliyor. Henüz koşmaz, oyuncu tamirden çıkınca başlar.
+	UGameplayStatics::PlaySoundAtLocation(this, ChaseStartScream, PendingSpawn.GetLocation());
+	UE_LOG(LogNLRunner, Log, TEXT("Runner spawned far away at %s (%.0f cm), waiting for the player to leave the repair"),
+		*PendingSpawn.GetLocation().ToCompactString(), FVector::Dist(PendingSpawn.GetLocation(), Target->GetActorLocation()));
+}
+
+FTransform ANLRunner::FindSpawnPoint(const ANLPlayerCharacter* Target) const
+{
+	// Oyuncunun ulaşılabilir NavMesh noktalarından: yeterince uzak ve tercihen görüş dışı olanı seç
+	FTransform Best = HomeTransform;
+	UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+	if (!Nav || !Target) return Best;
+
+	const FVector From = Target->GetActorLocation();
+	const FVector Eye = From + FVector(0.f, 0.f, 60.f);
+	const float HalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	float BestScore = -1.f;
+	for (int32 i = 0; i < 32; ++i)
+	{
+		FNavLocation P;
+		if (!Nav->GetRandomReachablePointInRadius(From, SpawnMaxDistance, P)) continue;
+		const float D = FVector::Dist2D(P.Location, From);
+		if (D < SpawnMinDistance) continue;
+
+		FHitResult Hit;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(NLRunnerSpawn), false, Target);
+		const bool bOutOfSight = GetWorld()->LineTraceSingleByChannel(Hit, Eye, P.Location + FVector(0.f, 0.f, 100.f), ECC_Visibility, Params);
+		const float Score = (bOutOfSight ? 10000.f : 0.f) + D;
+		if (Score > BestScore)
+		{
+			BestScore = Score;
+			const FVector Loc = P.Location + FVector(0.f, 0.f, HalfHeight + 2.f);
+			Best = FTransform(FRotator(0.f, (From - Loc).Rotation().Yaw, 0.f), Loc);
+		}
+	}
+	return Best;
+}
+
+void ANLRunner::StartChase(ANLPlayerCharacter* Target, const FTransform& From)
 {
 	if (bChasing || !Target) return;
+	bPendingChase = false;
 
 	ChaseTarget = Target;
 	bChasing = true;
 	ChaseTimer = ChaseDuration;
 	RepathTimer = 0.f;
 
-	SetActorTransform(HomeTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	SetActorTransform(From, false, nullptr, ETeleportType::TeleportPhysics);
 	SetDormant(false);
-
-	UGameplayStatics::PlaySound2D(this, ChaseStartScream);
 	ChaseAudio->Play();
 
 	// Teşhis: NavMesh var mı, oyuncuya yol bulunuyor mu?
@@ -167,7 +242,7 @@ void ANLRunner::StartChase(ANLPlayerCharacter* Target)
 
 void ANLRunner::StopChase()
 {
-	if (bChasing) UE_LOG(LogNLRunner, Log, TEXT("Runner chase ended (time out or target lost)"));
+	if (bChasing) UE_LOG(LogNLRunner, Log, TEXT("Runner chase ended"));
 	bChasing = false;
 	ChaseTarget.Reset();
 	if (AAIController* AI = Cast<AAIController>(GetController()))
@@ -185,6 +260,7 @@ void ANLRunner::SetDormant(bool bDormant)
 	{
 		// Gizlemek yetmez: gölge önbelleği eski gölgeyi bırakabilir. Haritanın altına taşı (StartChase evine geri koyar).
 		Grab.Stop();
+		FaceLight->SetVisibility(false);
 		FNLBodyPoseInput& In = BodyRig->GetPoseInput();
 		In.ReachAlphaL = In.ReachAlphaR = In.ElbowsOut = In.ExtraLean = 0.f;
 		SetActorLocation(GetActorLocation() - FVector(0.f, 0.f, 20000.f), false, nullptr, ETeleportType::TeleportPhysics);
@@ -262,4 +338,39 @@ void ANLRunner::KillTarget()
 	{
 		GM->TriggerGameOver(ENLGameOverReason::Runner, KillTime);
 	}
+}
+
+void ANLRunner::BeginDoorAssault(ANLHideDoor* Door)
+{
+	if (!Door) return;
+	UE_LOG(LogNLRunner, Log, TEXT("Runner reached the door, forcing it"));
+	bChasing = false;
+	bPendingChase = false;
+	bDoorAssault = true;
+	if (AAIController* AI = Cast<AAIController>(GetController())) AI->StopMovement();
+
+	// Kapının dışında, kapıya dönük dur (kapı kapalı: görünmez ama kapı aralandıkça seçilebilir)
+	const float HalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	const FVector Loc = Door->GetOutsideLocation() + FVector(0.f, 0.f, HalfHeight + 2.f);
+	const FRotator Face(0.f, Door->GetActorRotation().Yaw, 0.f);
+	SetActorLocationAndRotation(Loc, Face, false, nullptr, ETeleportType::TeleportPhysics);
+	SetDormant(false);
+	GetCharacterMovement()->DisableMovement();
+	ChaseAudio->Stop();
+}
+
+void ANLRunner::LeaveDoor()
+{
+	UE_LOG(LogNLRunner, Log, TEXT("Runner gave up on the door and left"));
+	bDoorAssault = false;
+	StopChase();
+}
+
+void ANLRunner::DoorKill(ANLPlayerCharacter* Target)
+{
+	bDoorAssault = false;
+	ChaseTarget = Target;
+	SetDormant(false);
+	FaceLight->SetVisibility(true);
+	KillTarget();
 }

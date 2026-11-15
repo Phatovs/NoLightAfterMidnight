@@ -269,6 +269,108 @@ def player_death():
     return fade(x, 0.005, 0.3)
 
 
+def door_open():
+    # Kol sesi + menteşe gıcırtısı
+    x = silence(1.0)
+    mix(x, click(1800, 0.06, 0.01, 0.5), 0.0, 0.7)
+    mix(x, creak(0.8, 260, 420, 0.3), 0.08, 0.8)
+    return x
+
+
+def door_close():
+    x = silence(0.9)
+    mix(x, creak(0.35, 420, 300, 0.3), 0.0, 0.5)
+    mix(x, thump(75, 0.3, 0.07), 0.32, 1.0)
+    mix(x, click(2200, 0.05, 0.006, 0.6), 0.36, 0.6)
+    return x
+
+
+def door_bang():
+    # Dışarıdan kapıya yüklenme: ağır darbe + kolun takırtısı + menteşe zorlanması
+    x = silence(1.1)
+    mix(x, thump(60, 0.4, 0.09), 0.0, 1.0)
+    mix(x, lowpass(noise(0.25), 1200), 0.0, 0.25)
+    for k in range(4):
+        mix(x, click(1500 + 300 * k, 0.04, 0.006, 0.7), 0.05 + 0.09 * k, 0.5 - 0.08 * k)
+    mix(x, creak(0.5, 200, 160, 0.4), 0.1, 0.45)
+    return fade(x, 0.002, 0.2)
+
+
+def door_burst():
+    # Kapı zorla açılır: kırılma + duvara çarpma
+    x = silence(1.4)
+    mix(x, thump(50, 0.5, 0.12), 0.0, 1.0)
+    mix(x, bandpass(noise(0.35), 300, 4000), 0.0, 0.6)
+    mix(x, creak(0.25, 500, 900, 0.5), 0.02, 0.6)
+    mix(x, thump(70, 0.35, 0.08), 0.28, 0.8)
+    return fade(x, 0.002, 0.3)
+
+
+def door_handle():
+    # Kapı kolu aşağı-yukarı takırdar
+    x = silence(0.5)
+    for k in range(3):
+        mix(x, click(2400 - 200 * k, 0.05, 0.005, 0.8), 0.0 + 0.12 * k, 0.8)
+    return x
+
+
+def breath_exhausted_loop():
+    # Tükenmiş, derin ve hırıltılı nefes: her 1.1 sn'de bir sesli içe çekiş + ağır veriş (döngü, 4 nefes)
+    per = 1.1
+    cycles = 4
+    n = int(SR * per * cycles)
+    base = noise(per * cycles)
+    inhale = bandpass(base, 1100, 4200)
+    exhale = bandpass(base, 250, 1300)
+    rasp = bandpass(noise(per * cycles), 90, 400)
+    x = [0.0] * n
+    pn = int(SR * per)
+    for c in range(cycles):
+        o = c * pn
+        g = 0.9 + 0.1 * math.sin(c * 2.3)
+        for i in range(pn):
+            t = i / pn
+            if t < 0.38:
+                # Hızla içe çekiş (gasp): hızlı yükselen, sonda kesilen
+                e = (t / 0.38) ** 0.6 * (1 - ((t / 0.38) ** 6))
+                v = inhale[o + i] * e * 0.9 + rasp[o + i] * e * 0.5
+            elif t < 0.46:
+                v = 0.0
+            else:
+                u = (t - 0.46) / 0.54
+                e = math.sin(math.pi * u) ** 1.1 * (1 - u * 0.3)
+                v = exhale[o + i] * e * 1.1 + rasp[o + i] * e * 0.35
+            x[o + i] = v * g
+    return x
+
+
+def breath_panic_loop():
+    # Hızlı, panik halinde nefes alıp verme (~2.1 nefes/sn), döngü
+    dur = 2.4
+    n = int(SR * dur)
+    base = noise(dur)
+    inhale = bandpass(base, 900, 3800)
+    exhale = bandpass(base, 300, 1600)
+    x = [0.0] * n
+    cycles = 5
+    per = n // cycles
+    for c in range(cycles):
+        o = c * per
+        for i in range(per):
+            t = i / per
+            if t < 0.42:
+                e = math.sin(math.pi * t / 0.42) ** 1.5 * 0.55
+                v = inhale[o + i] * e
+            elif t < 0.5:
+                v = 0.0
+            else:
+                e = math.sin(math.pi * (t - 0.5) / 0.5) ** 1.2
+                v = exhale[o + i] * e
+            x[o + i] = v * (0.85 + 0.15 * math.sin(c * 1.7))
+    return x
+
+
+
 SOUNDS = {
     "flashlight_on": flashlight_on,
     "flashlight_off": flashlight_off,
@@ -282,6 +384,13 @@ SOUNDS = {
     "chair_sit": chair_sit,
     "chair_stand": chair_stand,
     "player_death": player_death,
+    "door_open": door_open,
+    "door_close": door_close,
+    "door_bang": door_bang,
+    "door_burst": door_burst,
+    "door_handle": door_handle,
+    "breath_panic_loop": breath_panic_loop,
+    "breath_exhausted_loop": breath_exhausted_loop,
 }
 
 tasks = []
@@ -301,6 +410,9 @@ unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks(tasks)
 lines = []
 for name in SOUNDS:
     a = unreal.load_asset(DEST + "/" + name)
+    if a and name.endswith("_loop"):
+        a.set_editor_property("looping", True)
+        unreal.EditorAssetLibrary.save_loaded_asset(a)
     lines.append("%s: %s (%.2fs)" % (name, "OK" if a else "MISSING", a.get_editor_property("duration") if a else 0))
 with open(os.path.join(unreal.Paths.project_saved_dir(), "NLSounds.log"), "w", encoding="utf-8") as f:
     f.write("\n".join(lines))

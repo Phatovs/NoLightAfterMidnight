@@ -1,6 +1,7 @@
 #include "NLGenerator.h"
 #include "NLDefaults.h"
 #include "NLPowerSubsystem.h"
+#include "NLSaboteur.h"
 #include "NLPlayerCharacter.h"
 #include "NLGameMode.h"
 #include "Components/StaticMeshComponent.h"
@@ -81,7 +82,13 @@ void ANLGenerator::Tick(float DeltaSeconds)
 				}
 				else
 				{
-					BreakDown();
+					// Sabotajcı gelip jeneratörü bozar; gelemezse hemen boz
+					BreakdownTimer = 1.0e9f;
+					TWeakObjectPtr<ANLGenerator> WeakThis(this);
+					if (!ANLSaboteur::RequestSabotage(GetWorld(), this, [WeakThis]() { if (WeakThis.IsValid()) WeakThis->BreakDown(); }))
+					{
+						BreakDown();
+					}
 				}
 			}
 		}

@@ -18,6 +18,13 @@
 #include "Engine/Texture2D.h"
 #include "Styling/CoreStyle.h"
 #include "Misc/DateTime.h"
+#include "NLInteractable.h"
+#include "NLHideDoor.h"
+#include "EngineUtils.h"
+#include "Blueprint/WidgetLayoutLibrary.h"
+#include "Engine/GameViewportClient.h"
+#include "Engine/Engine.h"
+#include "Camera/PlayerCameraManager.h"
 
 // ------------------------------------------------------------------ Düzen (C++)
 
@@ -73,10 +80,28 @@ UProgressBar* UNLHUDWidget::MakeBar(UCanvasPanel* Canvas, FName Name, FVector2D 
 	return B;
 }
 
+static FSlateBrush MakeTextureBrush(UTexture2D* Texture, FVector2D ImageSize, bool bTile);
+
 void UNLHUDWidget::BuildDefaultLayout()
 {
 	UCanvasPanel* Root = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("Root"));
 	WidgetTree->RootWidget = Root;
+
+	// ---- Etkileşim işaretleri (en altta; diğer arayüzün arkasında kalır) ----
+	MarkerCanvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("InteractMarkers"));
+	FillCanvas(Root, MarkerCanvas);
+	// Yarı saydam koyu daire + ince açık kenar (kenarlar yumuşatılmış)
+	MarkerTexture = MakeProceduralTexture(64, 64, [](int32 X, int32 Y)
+	{
+		const float DX = X + 0.5f - 32.f, DY = Y + 0.5f - 32.f;
+		const float R = FMath::Sqrt(DX * DX + DY * DY);
+		const float Outer = 1.f - FMath::SmoothStep(29.f, 31.f, R);   // dairenin dışı şeffaf
+		const float Rim = FMath::SmoothStep(25.5f, 27.f, R) * Outer;    // kenar halkası
+		// İç siyah ve yarı saydam (alfa Image rengiyle ayrıca ölçeklenir), kenar beyaz ve opak
+		const float Lum = Rim;
+		const float A = FMath::Clamp(Outer * (0.7f + 0.3f * Rim), 0.f, 1.f);
+		return FColor(uint8(Lum * 255.f), uint8(Lum * 255.f), uint8(Lum * 255.f), uint8(A * 255.f));
+	}, false);
 
 	const FLinearColor Dim(0.75f, 0.75f, 0.75f, 1.f);
 	const FLinearColor Red(0.85f, 0.12f, 0.1f, 1.f);
@@ -105,7 +130,25 @@ void UNLHUDWidget::BuildDefaultLayout()
 	// Gece ve saat yürürken gösterilmez (kamera ekranında var). Yazılı "FLASHLIGHT" etiketi de yok, sadece pil barı.
 	GeneratorStatusText = MakeText(Root, TEXT("GeneratorStatusText"), TEXT(""), 24, FVector2D(0.5f, 0), FVector2D(0.5f, 0), FVector2D(0, 60), Red);
 	InteractPromptText  = MakeText(Root, TEXT("InteractPromptText"), TEXT(""), 20, FVector2D(0.5f, 0.6f), FVector2D(0.5f, 0.5f), FVector2D::ZeroVector);
+
+	// Ortadaki artı: oyuncu neye bakıp tıklayacağını görsün
+	{
+		Crosshair = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("Crosshair"));
+		UCanvasPanelSlot* XS = Root->AddChildToCanvas(Crosshair);
+		XS->SetAnchors(FAnchors(0.5f, 0.5f));
+		XS->SetAlignment(FVector2D(0.5f, 0.5f));
+		XS->SetSize(FVector2D(20.f, 20.f));
+		Crosshair->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
+		const FLinearColor C(1.f, 1.f, 1.f, 0.75f);
+		// Ortası boş artı (4 kısa çizgi) + merkez noktası
+		CrosshairParts.Add(MakeRect(Crosshair, TEXT("CrossL"), FVector2D(0.f, 9.f), FVector2D(6.f, 2.f), C));
+		CrosshairParts.Add(MakeRect(Crosshair, TEXT("CrossR"), FVector2D(14.f, 9.f), FVector2D(6.f, 2.f), C));
+		CrosshairParts.Add(MakeRect(Crosshair, TEXT("CrossT"), FVector2D(9.f, 0.f), FVector2D(2.f, 6.f), C));
+		CrosshairParts.Add(MakeRect(Crosshair, TEXT("CrossB"), FVector2D(9.f, 14.f), FVector2D(2.f, 6.f), C));
+		CrosshairParts.Add(MakeRect(Crosshair, TEXT("CrossDot"), FVector2D(9.f, 9.f), FVector2D(2.f, 2.f), C));
+	}
 	FuelCanText = MakeText(Root, TEXT("FuelCanText"), TEXT("Carrying fuel can"), 16, FVector2D(0, 1), FVector2D(0, 1), FVector2D(40, -60), Dim);
+	BuildStaminaGauge(Root);
 	FlashlightBar = MakeBar(Root, TEXT("FlashlightBar"), FVector2D(0, 1), FVector2D(0, 1), FVector2D(40, -34), FVector2D(160, 12), FLinearColor(1.f, 0.85f, 0.4f));
 
 	// ---- Tamir mini oyunu ----
@@ -114,7 +157,7 @@ void UNLHUDWidget::BuildDefaultLayout()
 		PlaceOnCanvas(Root, Repair, FVector2D(0.5f, 0.75f), FVector2D(0.5f, 0.5f), FVector2D::ZeroVector, FVector2D(RepairTrackWidth, 90), false);
 		RepairPanel = Repair;
 
-		MakeText(Repair, TEXT("RepairLabel"), TEXT("REPAIRING...  press [SPACE] in the green zone"), 18, FVector2D(0, 0), FVector2D(0, 0), FVector2D(0, 0));
+		RepairLabel = MakeText(Repair, TEXT("RepairLabel"), TEXT("REPAIRING...  press [SPACE] in the green zone"), 18, FVector2D(0, 0), FVector2D(0, 0), FVector2D(0, 0));
 
 		UImage* Track = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("RepairTrack"));
 		Track->SetColorAndOpacity(FLinearColor(0.1f, 0.1f, 0.1f, 0.9f));
@@ -143,6 +186,26 @@ void UNLHUDWidget::BuildDefaultLayout()
 
 	CenterMessageText = MakeText(Root, TEXT("CenterMessageText"), TEXT(""), 64, FVector2D(0.5f, 0.45f), FVector2D(0.5f, 0.5f), FVector2D::ZeroVector);
 	CenterMessageText->SetJustification(ETextJustify::Center);
+
+	// ---- Elektrik çarpması (en üstte) ----
+	FRandomStream SparkStream(4242);
+	if (UTexture2D* SparkTex = MakeProceduralTexture(256, 256, [&SparkStream](int32 X, int32 Y)
+	{
+		// Seyrek parlak noktalar + yatay çizgiler: elektrik paraziti
+		const float N = SparkStream.FRand();
+		const float Line = (Y % 7 == 0) ? 0.35f * SparkStream.FRand() : 0.f;
+		const float V = FMath::Clamp(FMath::Pow(N, 6.f) * 1.4f + Line, 0.f, 1.f);
+		return FColor(uint8(V * 200.f), uint8(V * 225.f), 255, uint8(V * 255.f));
+	}, true))
+	{
+		ShockOverlay = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("ShockOverlay"));
+		ShockOverlay->SetBrush(MakeTextureBrush(SparkTex, FVector2D(384.f, 384.f), true));
+		ShockOverlay->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
+		UCanvasPanelSlot* SS = Root->AddChildToCanvas(ShockOverlay);
+		SS->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
+		SS->SetOffsets(FMargin(-384.f, -384.f, 0.f, 0.f));
+		ShockOverlay->SetVisibility(ESlateVisibility::Collapsed);
+	}
 }
 
 // ------------------------------------------------------------------ CCTV düzeni
@@ -521,11 +584,40 @@ void UNLHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 
 	if (!Player) return;
 
+	// Elektrik çarpması efekti
+	if (ShockOverlay)
+	{
+		const float A = Player->GetShockAlpha();
+		ShockOverlay->SetVisibility(A > 0.f ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		if (A > 0.f)
+		{
+			const float Flash = FMath::Clamp((A - 0.8f) / 0.2f, 0.f, 1.f);   // ilk anda beyaz parlama
+			const float Opacity = FMath::Clamp(A * FMath::FRandRange(0.35f, 0.85f) + Flash * 0.5f, 0.f, 1.f);
+			ShockOverlay->SetColorAndOpacity(FLinearColor(FMath::Lerp(0.7f, 1.f, Flash), FMath::Lerp(0.85f, 1.f, Flash), 1.f, Opacity));
+			ShockOverlay->SetRenderTranslation(FVector2D(FMath::FRandRange(0.f, 384.f), FMath::FRandRange(0.f, 384.f)));
+			ShockOverlay->SetRenderScale(FVector2D(FMath::RandBool() ? 1.f : -1.f, FMath::RandBool() ? 1.f : -1.f));
+		}
+	}
+
 	const ENLPlayerMode Mode = Player->GetMode();
 	const bool bSeated = Mode == ENLPlayerMode::Seated;
 
 	// Masadayken alt yazıyı kamera arayüzü gösteriyor
-	if (InteractPromptText) InteractPromptText->SetText(bSeated ? FText::GetEmpty() : Player->GetCurrentInteractPrompt());
+	// Yürürken eylem yazısı işaretin yanında gösterilir; ortadaki yazı sadece tamir gibi modlarda
+	const bool bMarkersHandlePrompt = MarkerCanvas && Mode == ENLPlayerMode::Walking;
+	if (InteractPromptText) InteractPromptText->SetText(bSeated || bMarkersHandlePrompt ? FText::GetEmpty() : Player->GetCurrentInteractPrompt());
+	TickInteractMarkers(InDeltaTime, Player);
+
+	// Artı: sadece yürürken; etkileşimli nesneye bakınca büyür ve parlar
+	if (Crosshair)
+	{
+		const bool bShowCross = Mode == ENLPlayerMode::Walking && !Player->IsBusy();
+		SetShown(Crosshair, bShowCross);
+		CrosshairFocus = FMath::FInterpTo(CrosshairFocus, Player->GetFocusedActor() ? 1.f : 0.f, InDeltaTime, 14.f);
+		Crosshair->SetRenderScale(FVector2D(1.f + 0.45f * CrosshairFocus));
+		const FLinearColor C = FMath::Lerp(FLinearColor(1.f, 1.f, 1.f, 0.6f), FLinearColor(1.f, 0.95f, 0.75f, 1.f), CrosshairFocus);
+		for (UImage* Part : CrosshairParts) if (Part) Part->SetColorAndOpacity(C);
+	}
 	if (FlashlightBar && Player->GetFlashlight()) FlashlightBar->SetPercent(Player->GetFlashlight()->GetBatteryPercent());
 	SetShown(FuelCanText, Player->HasFuelCan() && !bSeated);
 
@@ -535,6 +627,7 @@ void UNLHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 	// Fener pili sadece fener açıkken görünür
 	SetShown(FlashlightBar, !bSeated && Player->GetFlashlight() && Player->GetFlashlight()->IsOn());
 	SetShown(FlashlightLabel, !bSeated);
+	TickStaminaGauge(InDeltaTime, Player);
 
 	// --- Kamera arayüzü ---
 	const bool bAtMonitor = Player->IsAtMonitor();
@@ -571,7 +664,7 @@ void UNLHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 			else if (Generator->GetFuelPercent() <= 0.f) Status = TEXT("OUT OF FUEL!");
 			else if (Generator->GetFuelPercent() < 0.15f) Status = TEXT("FUEL LOW");
 		}
-		if (Status.IsEmpty() && Power && Power->GetFuseBox() && Power->GetFuseBox()->IsTripped()) Status = TEXT("FUSE TRIPPED! RESET THE BREAKER");
+		if (Status.IsEmpty() && Power && Power->GetFuseBox() && Power->GetFuseBox()->IsTripped()) Status = TEXT("FUSES SWAPPED! FIX THE FUSE BOX");
 		if (Status.IsEmpty() && !bHasPower && Generator) Status = TEXT("NO POWER");
 		GeneratorStatusText->SetText(FText::FromString(Status));
 	}
@@ -579,8 +672,25 @@ void UNLHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 	// --- Tamir barı ---
 	const ANLGenerator* RepairGen = Player->GetCurrentGenerator();
 	const bool bRepairing = Mode == ENLPlayerMode::Repairing && RepairGen;
-	SetShown(RepairPanel, bRepairing);
-	if (bRepairing)
+	const ANLHideDoor* HoldDoor = Mode == ENLPlayerMode::HoldingDoor ? Player->GetHoldDoor() : nullptr;
+	const bool bDoorCheck = HoldDoor && HoldDoor->IsCheckWindowOpen();
+	SetShown(RepairPanel, bRepairing || bDoorCheck);
+	if (RepairLabel)
+	{
+		RepairLabel->SetText(FText::FromString(bDoorCheck ? TEXT("HOLD THE DOOR!  press [SPACE] in the zone") : TEXT("REPAIRING...  press [SPACE] in the green zone")));
+		RepairLabel->SetColorAndOpacity(FSlateColor(bDoorCheck ? FLinearColor(1.f, 0.35f, 0.3f) : FLinearColor::White));
+	}
+	if (bDoorCheck)
+	{
+		if (RepairProgressBar) RepairProgressBar->SetPercent(HoldDoor->GetHoldProgress());
+		if (RepairNeedle) RepairNeedle->SetRenderTranslation(FVector2D(HoldDoor->GetNeedlePosition() * RepairTrackWidth, 0.f));
+		if (RepairZone)
+		{
+			RepairZone->SetRenderTranslation(FVector2D(HoldDoor->GetZoneStart() * RepairTrackWidth, 0.f));
+			RepairZone->SetRenderScale(FVector2D(FMath::Max(1.f, HoldDoor->GetZoneWidth() * RepairTrackWidth), 1.f));
+		}
+	}
+	else if (bRepairing)
 	{
 		if (RepairProgressBar) RepairProgressBar->SetPercent(RepairGen->GetRepairProgress());
 		if (RepairNeedle) RepairNeedle->SetRenderTranslation(FVector2D(RepairGen->GetNeedlePosition() * RepairTrackWidth, 0.f));
@@ -629,4 +739,175 @@ void UNLHUDWidget::HandleGameOverScreen(ENLGameOverReason Reason)
 void UNLHUDWidget::HandleGameWon()
 {
 	ShowCenterMessage(TEXT("THE LIGHT NEVER WENT OUT.\nALL 7 NIGHTS SURVIVED"), true);
+}
+
+// ------------------------------------------------------------------ Etkileşim işaretleri
+
+void UNLHUDWidget::RefreshMarkerTargets()
+{
+	// Sahnedeki etkileşimli nesneleri topla (birkaç saniyede bir; nesne sayısı az)
+	TArray<AActor*> Found;
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		if (It->Implements<UNLInteractable>()) Found.Add(*It);
+	}
+
+	// Kaybolanların işaretini kaldır
+	for (int32 i = Markers.Num() - 1; i >= 0; --i)
+	{
+		if (!Markers[i].Target.IsValid() || !Found.Contains(Markers[i].Target.Get()))
+		{
+			if (Markers[i].Circle.IsValid()) Markers[i].Circle->RemoveFromParent();
+			if (Markers[i].Key.IsValid()) Markers[i].Key->RemoveFromParent();
+			if (Markers[i].Label.IsValid()) Markers[i].Label->RemoveFromParent();
+			Markers.RemoveAt(i);
+		}
+	}
+
+	// Yenilere işaret oluştur: daire, içindeki E ve yanındaki eylem yazısı
+	for (AActor* A : Found)
+	{
+		if (Markers.ContainsByPredicate([A](const FInteractMarker& M) { return M.Target.Get() == A; })) continue;
+
+		FInteractMarker M;
+		M.Target = A;
+
+		UImage* Circle = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+		FSlateBrush Brush;
+		Brush.SetResourceObject(MarkerTexture);
+		Brush.ImageSize = FVector2D(64.f, 64.f);
+		Circle->SetBrush(Brush);
+		UCanvasPanelSlot* CS = MarkerCanvas->AddChildToCanvas(Circle);
+		CS->SetAlignment(FVector2D(0.5f, 0.5f));
+		CS->SetAutoSize(false);
+		Circle->SetVisibility(ESlateVisibility::Collapsed);
+		M.Circle = Circle;
+
+		UTextBlock* Key = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		Key->SetText(FText::FromString(TEXT("E")));
+		Key->SetFont(FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 19));
+		Key->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+		Key->SetJustification(ETextJustify::Center);
+		UCanvasPanelSlot* KS = MarkerCanvas->AddChildToCanvas(Key);
+		KS->SetAlignment(FVector2D(0.5f, 0.5f));
+		KS->SetAutoSize(true);
+		Key->SetVisibility(ESlateVisibility::Collapsed);
+		M.Key = Key;
+
+		UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		Label->SetFont(FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 16));
+		Label->SetColorAndOpacity(FSlateColor(FLinearColor(0.92f, 0.92f, 0.92f, 1.f)));
+		Label->SetShadowOffset(FVector2D(1.f, 1.f));
+		Label->SetShadowColorAndOpacity(FLinearColor(0.f, 0.f, 0.f, 0.85f));
+		UCanvasPanelSlot* LS = MarkerCanvas->AddChildToCanvas(Label);
+		LS->SetAlignment(FVector2D(0.f, 0.5f));
+		LS->SetAutoSize(true);
+		Label->SetVisibility(ESlateVisibility::Collapsed);
+		M.Label = Label;
+
+		Markers.Add(M);
+	}
+}
+
+void UNLHUDWidget::TickInteractMarkers(float InDeltaTime, const ANLPlayerCharacter* Player)
+{
+	if (!MarkerCanvas || !MarkerTexture) return;
+
+	MarkerRefreshTimer -= InDeltaTime;
+	if (MarkerRefreshTimer <= 0.f)
+	{
+		MarkerRefreshTimer = 2.f;
+		RefreshMarkerTargets();
+	}
+
+	APlayerController* PC = GetOwningPlayer();
+	// Masada otururken, bir iş yaparken ya da ölünce işaretler gizlenir
+	const bool bActive = PC && PC->PlayerCameraManager && Player && Player->GetMode() == ENLPlayerMode::Walking && !Player->IsBusy();
+	const FVector CamLoc = bActive ? PC->PlayerCameraManager->GetCameraLocation() : FVector::ZeroVector;
+	const FVector CamFwd = bActive ? PC->PlayerCameraManager->GetCameraRotation().Vector() : FVector::ForwardVector;
+	const AActor* Focused = Player ? Player->GetFocusedActor() : nullptr;
+	const float ViewportScale = FMath::Max(UWidgetLayoutLibrary::GetViewportScale(this), 0.01f);
+	FVector2D ViewSize(1920.f, 1080.f);
+	if (GEngine && GEngine->GameViewport) GEngine->GameViewport->GetViewportSize(ViewSize);
+	const FVector2D ViewCenter = ViewSize * 0.5f;
+	// Ekranın görünür alanında mı (kenarlardan biraz pay)
+	auto IsOnScreen = [&ViewSize](const FVector2D& P) { return P.X > 30.f && P.Y > 30.f && P.X < ViewSize.X - 30.f && P.Y < ViewSize.Y - 30.f; };
+
+	for (FInteractMarker& M : Markers)
+	{
+		AActor* Target = M.Target.Get();
+		UImage* Circle = M.Circle.Get();
+		UTextBlock* Key = M.Key.Get();
+		UTextBlock* Label = M.Label.Get();
+		if (!Target || !Circle || !Key || !Label) continue;
+
+		float WantAlpha = 0.f;
+		FVector2D ScreenPos = FVector2D::ZeroVector;
+		const INLInteractable* I = Cast<INLInteractable>(Target);
+
+		if (bActive && !Target->IsHidden() && I && I->CanInteract(Player))
+		{
+			// Nesnenin üst yüzeyinin biraz üstü
+			const FBox Box = Target->GetComponentsBoundingBox();
+			const FVector Point(Box.GetCenter().X, Box.GetCenter().Y, Box.Max.Z + MarkerHeightOffset);
+			const float Dist = FVector::Dist(CamLoc, Point);
+			const bool bInFront = FVector::DotProduct((Point - CamLoc).GetSafeNormal(), CamFwd) > 0.1f;
+
+			if (Dist < MarkerShowDistance && bInFront)
+			{
+				// Duvarın arkasındaysa gösterme
+				FHitResult Hit;
+				FCollisionQueryParams Params(SCENE_QUERY_STAT(NLMarkerSight), false, Player);
+				Params.AddIgnoredActor(Target);
+				const bool bBlocked = GetWorld()->LineTraceSingleByChannel(Hit, CamLoc, Point, ECC_Visibility, Params);
+
+				FVector2D Pixel;
+				if (!bBlocked && PC->ProjectWorldLocationToScreen(Point, Pixel, true) && IsOnScreen(Pixel))
+				{
+					ScreenPos = Pixel / ViewportScale;
+					WantAlpha = FMath::Clamp((MarkerShowDistance - Dist) / FMath::Max(MarkerFadeDistance, 1.f), 0.f, 1.f);
+				}
+			}
+
+			// Bakılan nesnenin işareti ekran dışına / engelin arkasına düştüyse (ör. dibindeyken) artının hemen üstünde göster
+			if (Target == Focused && WantAlpha <= 0.f)
+			{
+				ScreenPos = ViewCenter / ViewportScale - FVector2D(0.f, 58.f);
+				WantAlpha = 1.f;
+			}
+		}
+
+		// Bakılan nesne: büyür, içinde E; yanında eylem yazısı. Bilgi yazısında ("[E]" yok) E çıkmaz.
+		const bool bFocused = WantAlpha > 0.f && Target == Focused;
+		FString Prompt = bFocused ? I->GetInteractPrompt(Player).ToString() : FString();
+		const bool bActionable = Prompt.Contains(TEXT("[E]"));
+		Prompt.ReplaceInline(TEXT("[E] "), TEXT(""));
+		Prompt.ReplaceInline(TEXT("[E]"), TEXT(""));
+		Prompt.TrimStartAndEndInline();
+
+		M.Alpha = FMath::FInterpTo(M.Alpha, WantAlpha, InDeltaTime, 10.f);
+		M.Focus = FMath::FInterpTo(M.Focus, bFocused && bActionable ? 1.f : 0.f, InDeltaTime, 14.f);
+
+		const bool bShow = M.Alpha > 0.01f;
+		Circle->SetVisibility(bShow ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		Key->SetVisibility(bShow && M.Focus > 0.05f ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		Label->SetVisibility(bShow && bFocused && !Prompt.IsEmpty() ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		if (!bShow) continue;
+
+		const float Size = FMath::Lerp(MarkerSize, MarkerFocusedSize, M.Focus);
+		if (UCanvasPanelSlot* CS = Cast<UCanvasPanelSlot>(Circle->Slot))
+		{
+			CS->SetPosition(ScreenPos);
+			CS->SetSize(FVector2D(Size, Size));
+		}
+		// İç kısım yarı saydam: Image alfası doku alfasıyla çarpılır (bakılınca biraz koyulaşır)
+		Circle->SetColorAndOpacity(FLinearColor(1.f, 1.f, 1.f, M.Alpha * FMath::Lerp(MarkerFill.A + 0.2f, 1.f, M.Focus)));
+
+		if (UCanvasPanelSlot* KS = Cast<UCanvasPanelSlot>(Key->Slot)) KS->SetPosition(ScreenPos);
+		Key->SetRenderOpacity(M.Alpha * M.Focus);
+
+		if (UCanvasPanelSlot* LS = Cast<UCanvasPanelSlot>(Label->Slot)) LS->SetPosition(ScreenPos + FVector2D(Size * 0.5f + 8.f, 0.f));
+		Label->SetText(FText::FromString(Prompt));
+		Label->SetRenderOpacity(M.Alpha);
+	}
 }

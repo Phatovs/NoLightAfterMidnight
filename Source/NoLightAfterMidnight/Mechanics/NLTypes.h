@@ -31,6 +31,8 @@ enum class ENLPlayerMode : uint8
 	Walking,
 	Seated,
 	Repairing,
+	UsingFuseBox,  // sigorta kutusu arayüzü açık
+	HoldingDoor,   // Runner'a karşı saklanma kapısını tutuyor
 	Dead
 };
 

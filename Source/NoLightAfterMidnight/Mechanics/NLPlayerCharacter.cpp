@@ -21,10 +21,16 @@
 #include "NLBodyRigComponent.h"
 #include "NLFuelCan.h"
 #include "NLFuseBox.h"
+#include "NLFuseBoxWidget.h"
+#include "InputKeyEventArgs.h"
+#include "GenericPlatform/GenericPlatformInputDeviceMapper.h"
+#include "Engine/GameViewportClient.h"
 #include "NLFlashlightCharger.h"
 #include "NLDrowned.h"
 #include "NLSecurityCamera.h"
 #include "NLRunner.h"
+#include "NLSaboteur.h"
+#include "NLHideDoor.h"
 #include "NLGameMode.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -32,6 +38,7 @@
 #include "Camera/CameraActor.h"
 #include "EngineUtils.h"
 #include "TimerManager.h"
+#include "Components/AudioComponent.h"
 
 ANLPlayerCharacter::ANLPlayerCharacter()
 {
@@ -39,6 +46,9 @@ ANLPlayerCharacter::ANLPlayerCharacter()
 	NL_DEFAULT_SOUND(FootstepSound, "footstep");
 	NL_DEFAULT_SOUND(StandUpSound, "chair_stand");
 	NL_DEFAULT_SOUND(DeathSound, "player_death");
+	NL_DEFAULT_SOUND(ShockSound, "fuse_trip");
+	NL_DEFAULT_SOUND(PantingLoop, "breath_panic_loop");
+	NL_DEFAULT_SOUND(ExhaustedBreathLoop, "breath_exhausted_loop");
 
 	PrimaryActorTick.bCanEverTick = true;
 
@@ -100,6 +110,17 @@ ANLPlayerCharacter::ANLPlayerCharacter()
 	CarryCanMesh->SetCastShadow(false);
 	CarryCanPivot->SetVisibility(false, true);
 
+	// Koştuktan sonra nefes nefese kalma (2D, sesi stamina azaldıkça artar)
+	PantingAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("PantingAudio"));
+	PantingAudio->SetupAttachment(GetCapsuleComponent());
+	PantingAudio->bAutoActivate = false;
+	PantingAudio->bAllowSpatialization = false;
+
+	ExhaustedBreathAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("ExhaustedBreathAudio"));
+	ExhaustedBreathAudio->SetupAttachment(GetCapsuleComponent());
+	ExhaustedBreathAudio->bAutoActivate = false;
+	ExhaustedBreathAudio->bAllowSpatialization = false;
+
 	bUseControllerRotationYaw = true;
 
 	// Varsayılan: arayüzü tamamen C++'ta kuran HUD. İsterseniz kendi WBP'nizi atayabilirsiniz.
@@ -119,6 +140,8 @@ void ANLPlayerCharacter::BeginPlay()
 	BodyRig->SetDriver(GetMesh());
 	BodyRig->SetHeldFlashlight(FlashlightPivot);
 	BodyRig->SetHeldCan(CarryCanPivot);
+	if (PantingLoop) PantingAudio->SetSound(PantingLoop);
+	if (ExhaustedBreathLoop) ExhaustedBreathAudio->SetSound(ExhaustedBreathLoop);
 }
 
 void ANLPlayerCharacter::PossessedBy(AController* NewController)
@@ -255,7 +278,7 @@ void ANLPlayerCharacter::OnMove(const FInputActionValue& Value)
 
 void ANLPlayerCharacter::OnLook(const FInputActionValue& Value)
 {
-	if (Mode == ENLPlayerMode::Seated || Mode == ENLPlayerMode::Dead || IsBusy()) return;
+	if (Mode == ENLPlayerMode::Seated || Mode == ENLPlayerMode::Dead || Mode == ENLPlayerMode::UsingFuseBox || Mode == ENLPlayerMode::HoldingDoor || IsBusy()) return;
 
 	const FVector2D Axis = Value.Get<FVector2D>() * MouseSensitivity;
 	AddControllerYawInput(Axis.X);
@@ -272,6 +295,10 @@ void ANLPlayerCharacter::OnInteract()
 
 	case ENLPlayerMode::Repairing:
 		if (ANLGenerator* Gen = CurrentGenerator.Get()) Gen->CancelRepair();
+		return;
+
+	case ENLPlayerMode::UsingFuseBox:
+		CloseFuseBox();
 		return;
 
 	case ENLPlayerMode::Walking:
@@ -299,6 +326,10 @@ void ANLPlayerCharacter::OnSpace()
 	else if (Mode == ENLPlayerMode::Repairing)
 	{
 		if (ANLGenerator* Gen = CurrentGenerator.Get()) Gen->HandleRepairInput();
+	}
+	else if (Mode == ENLPlayerMode::HoldingDoor)
+	{
+		if (ANLHideDoor* Door = HoldDoor.Get()) Door->HandleHoldInput();
 	}
 }
 
@@ -348,27 +379,80 @@ void ANLPlayerCharacter::Tick(float DeltaSeconds)
 		FocusedActor.Reset();
 	}
 
+	UpdateStamina(DeltaSeconds);
 	if (bDebugWalk) AddMovementInput(GetActorForwardVector(), 1.f);
 	UpdateBody(DeltaSeconds);
 }
 
 void ANLPlayerCharacter::UpdateFocus()
 {
-	const FVector Start = FirstPersonCamera->GetComponentLocation();
-	const FVector End = Start + FirstPersonCamera->GetForwardVector() * InteractDistance;
-
-	FHitResult Hit;
-	FCollisionQueryParams Params(SCENE_QUERY_STAT(NLInteract), false, this);
-
-	AActor* NewFocus = nullptr;
-	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+	// Etkileşimli nesneleri birkaç saniyede bir topla
+	InteractableCacheTimer -= GetWorld()->GetDeltaSeconds();
+	if (InteractableCacheTimer <= 0.f)
 	{
-		if (Hit.GetActor() && Hit.GetActor()->Implements<UNLInteractable>())
+		InteractableCacheTimer = 2.f;
+		InteractableCache.Reset();
+		for (TActorIterator<AActor> It(GetWorld()); It; ++It)
 		{
-			NewFocus = Hit.GetActor();
+			if (It->Implements<UNLInteractable>()) InteractableCache.Add(*It);
 		}
 	}
-	FocusedActor = NewFocus;
+
+	const FVector Eye = FirstPersonCamera->GetComponentLocation();
+	const FVector Fwd = (Controller ? Controller->GetControlRotation() : GetActorRotation()).Vector();
+
+	// 1) Artı doğrudan bir etkileşimli nesneye değiyorsa o seçilir
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(NLInteract), false, this);
+	if (GetWorld()->LineTraceSingleByChannel(Hit, Eye, Eye + Fwd * InteractDistance, ECC_Visibility, Params) &&
+		Hit.GetActor() && Hit.GetActor()->Implements<UNLInteractable>())
+	{
+		const INLInteractable* I = Cast<INLInteractable>(Hit.GetActor());
+		if (I && I->CanInteract(this))
+		{
+			FocusedActor = Hit.GetActor();
+			return;
+		}
+	}
+
+	// 2) Yoksa: menzildeki, artıya en yakın görünen nesne (sınırının içinde ya da biraz dışında)
+	AActor* Best = nullptr;
+	float BestScore = TNumericLimits<float>::Max();
+	for (const TWeakObjectPtr<AActor>& Weak : InteractableCache)
+	{
+		AActor* A = Weak.Get();
+		if (!A || A->IsHidden()) continue;
+		const INLInteractable* I = Cast<INLInteractable>(A);
+		if (!I || !I->CanInteract(this)) continue;
+
+		const FBox Box = A->GetComponentsBoundingBox();
+		if (!Box.IsValid) continue;
+		// Mesafe: nesnenin sınırına (dibine girince de çalışsın)
+		const float Dist = FVector::Dist(Box.GetClosestPointTo(Eye), Eye);
+		if (Dist > InteractDistance) continue;
+
+		// Açı: artının nesneye uzaklığı; nesne ne kadar büyük görünüyorsa o kadar pay
+		const FVector Center = Box.GetCenter();
+		const FVector ToCenter = Center - Eye;
+		const float CenterDist = FMath::Max(ToCenter.Size(), 1.f);
+		const float Angle = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Fwd, ToCenter / CenterDist), -1.f, 1.f)));
+		const float Radius = Box.GetExtent().Size() * 0.8f;
+		const float Allowed = InteractAimTolerance + FMath::RadiansToDegrees(FMath::Atan(Radius / CenterDist));
+		if (Angle > Allowed) continue;
+
+		// Arada duvar var mı?
+		FCollisionQueryParams SightParams(SCENE_QUERY_STAT(NLInteractSight), false, this);
+		SightParams.AddIgnoredActor(A);
+		if (GetWorld()->LineTraceSingleByChannel(Hit, Eye, Center, ECC_Visibility, SightParams)) continue;
+
+		const float Score = Angle / Allowed;
+		if (Score < BestScore)
+		{
+			BestScore = Score;
+			Best = A;
+		}
+	}
+	FocusedActor = Best;
 }
 
 void ANLPlayerCharacter::UpdateFootsteps(float DeltaSeconds)
@@ -383,7 +467,8 @@ void ANLPlayerCharacter::UpdateFootsteps(float DeltaSeconds)
 	FootstepTimer -= DeltaSeconds;
 	if (FootstepTimer <= 0.f)
 	{
-		FootstepTimer = FootstepInterval;
+		// Koşarken adımlar sıklaşır
+		FootstepTimer = FootstepInterval * FMath::Clamp(WalkSpeed / FMath::Max(GetVelocity().Size2D(), 1.f), 0.55f, 1.f);
 		const FVector Feet = GetActorLocation() - FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
 		UGameplayStatics::PlaySoundAtLocation(this, FootstepSound, Feet, FMath::FRandRange(0.8f, 1.f), FMath::FRandRange(0.92f, 1.08f));
 	}
@@ -578,6 +663,68 @@ void ANLPlayerCharacter::UpdateBody(float DeltaSeconds)
 		}
 	}
 
+	// --- Saklanma kapısı: kapıya yaslan, kola bak, nefes nefese ---
+	FVector HoldGrip = FVector::ZeroVector, HoldPalm = FVector::ZeroVector;
+	ANLHideDoor* Door = HoldDoor.Get();
+	const bool bHolding = Mode == ENLPlayerMode::HoldingDoor && Door;
+	if (bHolding)
+	{
+		HoldTimer += DeltaSeconds;
+		const float MoveT = FMath::SmoothStep(0.f, 0.55f, HoldTimer);
+		SetActorLocation(FMath::Lerp(HoldFromLocation, Door->GetHoldStandLocation(GetCapsuleComponent()->GetScaledCapsuleHalfHeight()), MoveT));
+		HoldGrip = Door->GetHandleGripLocation();
+		HoldPalm = Door->GetDoorPalmLocation();
+	}
+	HoldHands = FMath::FInterpTo(HoldHands, bHolding ? 1.f : 0.f, DeltaSeconds, bHolding ? 5.f : 3.f);
+	const float HoldReach = bHolding ? HoldHands : 0.f;
+
+	// Panik nefesi: hızlı nefes ritminde bakış iner-kalkar; zorlama anında sarsıntı artar
+	const float Force = Door ? Door->GetForceAlpha() : 0.f;
+	BreathAlpha = FMath::FInterpTo(BreathAlpha, bHolding ? 1.f : 0.f, DeltaSeconds, bHolding ? 3.f : 0.6f);
+	if (Controller && Mode != ENLPlayerMode::Dead && (BreathAlpha > 0.002f || !BreathOffset.IsZero()))
+	{
+		BreathTime += DeltaSeconds * (1.f + 0.35f * Force);
+		const float W = 2.f * PI * BreathRate;
+		const float Amp = BreathShake * BreathAlpha * (1.f + 1.6f * Force);
+		FRotator NewBreath(
+			Amp * (FMath::Sin(BreathTime * W) + 0.25f * FMath::Sin(BreathTime * W * 2.f + 0.7f)),
+			Amp * 0.45f * FMath::Sin(BreathTime * W * 0.5f + 1.3f),
+			Amp * 0.6f * FMath::Sin(BreathTime * W * 0.33f));
+		if (Force > 0.05f)
+		{
+			NewBreath += FRotator(FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-0.5f, 0.5f)) * (1.4f * Force);
+		}
+		if (BreathAlpha <= 0.002f) NewBreath = FRotator::ZeroRotator;
+
+		FRotator Base = Controller->GetControlRotation() - BreathOffset;
+		if (bHolding)
+		{
+			// Kamera kendiliğinden kapı koluna döner
+			// Kolun biraz üstüne bakar: kol ekranın alt-ortasında, kapı kadrajda
+			FRotator Look = (HoldGrip + FVector(0.f, 0.f, 28.f) - FirstPersonCamera->GetComponentLocation()).Rotation();
+			Look.Roll = 0.f;
+			Base = FMath::RInterpTo(Base, Look, DeltaSeconds, 4.f);
+		}
+		Controller->SetControlRotation(Base + NewBreath);
+		BreathOffset = NewBreath;
+	}
+	else if (Mode == ENLPlayerMode::Dead)
+	{
+		BreathOffset = FRotator::ZeroRotator;
+	}
+
+	// Elektrik çarpması: bakış titrer, sonra normale döner
+	if (Controller && (ShockTime > 0.f || !ShockShakeOffset.IsZero()))
+	{
+		ShockTime = FMath::Max(0.f, ShockTime - DeltaSeconds);
+		const float A = GetShockAlpha();
+		const FRotator NewShake = A > 0.f
+			? FRotator(FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-0.6f, 0.6f)) * (ShockShake * A)
+			: FRotator::ZeroRotator;
+		Controller->SetControlRotation(Controller->GetControlRotation() - ShockShakeOffset + NewShake);
+		ShockShakeOffset = NewShake;
+	}
+
 	FlashAim = FMath::FInterpTo(FlashAim, Flashlight->IsOn() ? 1.f : 0.f, DeltaSeconds, 7.f);
 	WorkAlpha = FMath::FInterpTo(WorkAlpha, Mode == ENLPlayerMode::Repairing ? 1.f : 0.f, DeltaSeconds, 6.f);
 
@@ -606,13 +753,13 @@ void ANLPlayerCharacter::UpdateBody(float DeltaSeconds)
 	In.SitDeskHeight = SitDeskHeight;
 	In.CrouchAlpha = FMath::Max(Crouch, 0.3f * Pour);
 	In.CrouchDepth = PickupCrouchDepth;
-	In.ReachAlphaL = Reach;
-	In.ReachTargetL = PickupCanTop;
+	In.ReachAlphaL = FMath::Max(Reach, HoldReach);
+	In.ReachTargetL = HoldReach > Reach ? HoldPalm : PickupCanTop;
 	In.bHoldFlashlight = !Flashlight->IsDocked();
 	In.FlashlightAim = FlashAim;
 	In.WorkAlpha = WorkAlpha;
-	In.ReachAlphaR = ReachR;
-	In.ReachTargetR = ReachTargetR;
+	In.ReachAlphaR = FMath::Max(ReachR, HoldReach);
+	In.ReachTargetR = HoldReach > ReachR ? HoldGrip : ReachTargetR;
 	In.DeskHandsAlpha = DeskHands;
 	In.ExtraLean = ExtraLean;
 	In.CanOverrideAlpha = Pour;
@@ -719,6 +866,7 @@ void ANLPlayerCharacter::Die()
 	}
 
 	Mode = ENLPlayerMode::Dead;
+	HoldDoor.Reset();
 	GetCharacterMovement()->StopMovementImmediately();
 	GetCharacterMovement()->DisableMovement();
 	Flashlight->ForceOff();
@@ -1037,4 +1185,683 @@ void ANLPlayerCharacter::NLDebugShots4()
 		T.SetTimer(D, FTimerDelegate::CreateWeakLambda(this, [this]() { DebugShot(TEXT("44 runner jumpscare (side view)")); }), 1.0f, false);
 		T.SetTimer(Q, FTimerDelegate::CreateWeakLambda(this, [this]() { if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("quit")); }), 1.4f, false);
 	}), 0.02f, true);
+}
+
+void ANLPlayerCharacter::NLDebugShots5()
+{
+	FTimerManager& TM = GetWorldTimerManager();
+	auto At = [this, &TM](float Time, TFunction<void()> Fn)
+	{
+		FTimerHandle H;
+		TM.SetTimer(H, FTimerDelegate::CreateWeakLambda(this, [Fn]() { Fn(); }), Time, false);
+	};
+	auto UIShot = [this](const TCHAR* Name)
+	{
+		UE_LOG(LogTemp, Log, TEXT("NLDebugShots: %s"), Name);
+		if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("shot showui"));
+	};
+	auto LookAt = [this](const FVector& P)
+	{
+		if (Controller) Controller->SetControlRotation((P - FirstPersonCamera->GetComponentLocation()).Rotation());
+	};
+	auto FuseCenter = [this]() { for (TActorIterator<ANLFuseBox> It(GetWorld()); It; ++It) return It->GetComponentsBoundingBox().GetCenter(); return FVector::ZeroVector; };
+	auto ChargerCenter = [this]() { for (TActorIterator<ANLFlashlightCharger> It(GetWorld()); It; ++It) return It->GetComponentsBoundingBox().GetCenter(); return FVector::ZeroVector; };
+
+	// 1) Uzaktan (5 m): sadece yuvarlaklar
+	At(0.4f, [this, FuseCenter, ChargerCenter, LookAt]()
+	{
+		const FVector Mid = (FuseCenter() + ChargerCenter()) * 0.5f;
+		SetActorLocation(FVector(Mid.X, Mid.Y + 480.f, GetActorLocation().Z), false, nullptr, ETeleportType::TeleportPhysics);
+		LookAt(Mid);
+	});
+	At(1.6f, [UIShot]() { UIShot(TEXT("51 far: circles only")); });
+
+	// 2) Yakın: şaltere bak -> şalterde E, şarjda sadece yuvarlak
+	At(2.0f, [this, FuseCenter, ChargerCenter, LookAt]()
+	{
+		const FVector Mid = (FuseCenter() + ChargerCenter()) * 0.5f;
+		SetActorLocation(FVector(Mid.X, Mid.Y + 170.f, GetActorLocation().Z), false, nullptr, ETeleportType::TeleportPhysics);
+		LookAt(FuseCenter());
+	});
+	At(3.0f, [UIShot]() { UIShot(TEXT("52 near, looking at breaker")); });
+
+	// 3) Şarj istasyonuna bak -> E oraya geçer
+	At(3.3f, [ChargerCenter, LookAt]() { LookAt(ChargerCenter()); });
+	At(4.3f, [UIShot]() { UIShot(TEXT("53 near, looking at charger")); });
+	At(4.8f, [this]() { if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("quit")); });
+}
+
+void ANLPlayerCharacter::NLDebugRunnerRepair()
+{
+	FTimerManager& TM = GetWorldTimerManager();
+	auto At = [this, &TM](float Time, TFunction<void()> Fn)
+	{
+		FTimerHandle H;
+		TM.SetTimer(H, FTimerDelegate::CreateWeakLambda(this, [Fn]() { Fn(); }), Time, false);
+	};
+	auto Gen = [this]() -> ANLGenerator* { for (TActorIterator<ANLGenerator> It(GetWorld()); It; ++It) return *It; return nullptr; };
+	auto Runner = [this]() -> ANLRunner* { for (TActorIterator<ANLRunner> It(GetWorld()); It; ++It) return *It; return nullptr; };
+	auto Report = [this, Runner](const TCHAR* Tag)
+	{
+		ANLRunner* R = Runner();
+		UE_LOG(LogTemp, Log, TEXT("NLTest %s: mode=%d runner_chasing=%d runner_hidden=%d dist=%.0f"), Tag, int32(Mode),
+			R ? int32(R->IsChasing()) : -1, R ? int32(R->IsHidden()) : -1, R ? FVector::Dist(R->GetActorLocation(), GetActorLocation()) : -1.f);
+	};
+
+	At(0.3f, [this, Gen]() { if (ANLGenerator* G = Gen()) { G->BreakDown(); G->Interact(this); } });
+	At(0.6f, [this, Report]()
+	{
+		Report(TEXT("before mistake"));
+		if (ANLGameMode* GM = GetWorld()->GetAuthGameMode<ANLGameMode>()) GM->RequestRunnerChase(this);  // tamir hatası
+	});
+	At(2.0f, [Report]() { Report(TEXT("still repairing (runner must wait)")); });
+	At(3.5f, [Report]() { Report(TEXT("still repairing (runner must wait)")); });
+	At(3.6f, [this, Gen]() { if (ANLGenerator* G = Gen()) G->CancelRepair(); });
+	At(4.0f, [this, Runner, Report]()
+	{
+		Report(TEXT("left repair (runner should run)"));
+		// Runner'dan uzağa kaç
+		if (ANLRunner* R = Runner())
+		{
+			const FVector Away = GetActorLocation() - R->GetActorLocation();
+			if (Controller) Controller->SetControlRotation(FRotator(0.f, Away.Rotation().Yaw, 0.f));
+		}
+		bDebugWalk = true;
+	});
+	for (int32 i = 1; i <= 6; ++i)
+	{
+		At(4.0f + i * 1.5f, [Report]() { Report(TEXT("escaping")); });
+	}
+	At(13.6f, [this]() { bDebugWalk = false; if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("quit")); });
+}
+
+void ANLPlayerCharacter::NLDebugShots6()
+{
+	// Şalter hemen atmak istesin -> Sabotajcı gelir. Kamera onu yandan takip eder; her aşamada bir kare.
+	if (ANLGameMode* GM = GetWorld()->GetAuthGameMode<ANLGameMode>()) GM->NLDebugFuseIn(0.3f);
+
+	FTimerHandle Poll;
+	GetWorldTimerManager().SetTimer(Poll, FTimerDelegate::CreateWeakLambda(this, [this]()
+	{
+		static int32 LastState = -1;
+		static float StateClock = 0.f;
+		static int32 Shots = 0;
+		ANLSaboteur* S = nullptr;
+		for (TActorIterator<ANLSaboteur> It(GetWorld()); It; ++It) { S = *It; break; }
+		APlayerController* PC = Cast<APlayerController>(GetController());
+		if (!S || !PC) return;
+
+		const int32 St = S->GetDebugState();
+		StateClock = (St == LastState) ? StateClock + 0.1f : 0.f;
+		const bool bEntered = St != LastState;
+		LastState = St;
+		if (St == 0) { if (Shots > 0) PC->ConsoleCommand(TEXT("quit")); return; }
+
+		if (!DebugCamera) DebugCamera = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform::Identity);
+		const FVector L = S->GetActorLocation();
+		const FVector Side = FRotationMatrix(S->GetActorRotation()).GetUnitAxis(EAxis::Y);
+		const FVector Fwd = S->GetActorForwardVector();
+		// Kurcalarken arkadan-yandan, hedefe doğru bak; diğer aşamalarda yandan
+		const FVector CamLoc = St == 2 ? L - Fwd * 170.f + Side * 110.f + FVector(0.f, 0.f, 70.f) : L + Side * 230.f + Fwd * 90.f + FVector(0.f, 0.f, 50.f);
+		const FVector Look = St == 2 ? L + Fwd * 60.f + FVector(0.f, 0.f, 20.f) : L;
+		DebugCamera->SetActorLocationAndRotation(CamLoc, (Look - CamLoc).Rotation());
+		PC->SetViewTarget(DebugCamera);
+
+		// 1: yürürken 1.5 sn sonra, 2: kurcalarken 1 sn sonra, 3: kaçarken 0.8 sn sonra
+		const float When = St == 1 ? 1.5f : (St == 2 ? 1.0f : 0.8f);
+		if (!bEntered && FMath::IsNearlyEqual(StateClock, When, 0.05f))
+		{
+			const TCHAR* Names[] = { TEXT(""), TEXT("61 saboteur sneaking"), TEXT("62 saboteur tampering with breaker"), TEXT("63 saboteur running away") };
+			DebugShot(Names[St]);
+			++Shots;
+		}
+	}), 0.1f, true);
+}
+
+// ------------------------------------------------------------------ Sigorta kutusu
+
+void ANLPlayerCharacter::OpenFuseBox(ANLFuseBox* Box)
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!Box || !PC || Mode != ENLPlayerMode::Walking || IsBusy()) return;
+
+	Mode = ENLPlayerMode::UsingFuseBox;
+	CurrentFuseBox = Box;
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->DisableMovement();
+	PC->SetControlRotation((Box->GetComponentsBoundingBox().GetCenter() - FirstPersonCamera->GetComponentLocation()).Rotation());
+	// Görüş kutunun yakın plan kamerasına kayar; oyuncunun gövdesi kadraja girmesin
+	PC->SetViewTargetWithBlend(Box, 0.45f, VTBlend_EaseInOut, 2.f);
+	Box->SetViewing(true);
+	// Gövde ve eldeki nesneler gizlenir; fenerin ışığı açık kalır (kutuyu aydınlatır)
+	BodyRig->SetHiddenInGame(true);
+	FlashlightMesh->SetHiddenInGame(true);
+	CarryCanMesh->SetHiddenInGame(true);
+
+	FuseWidget = CreateWidget<UNLFuseBoxWidget>(PC, UNLFuseBoxWidget::StaticClass());
+	if (!FuseWidget) { CloseFuseBox(); return; }
+	FuseWidget->Init(Box, this);
+	FuseWidget->AddToViewport(20);
+
+	FInputModeGameAndUI InputMode;
+	// Odak oyun ekranında kalır: fare tıklamaları oyuna gider, katman her karede fareyi okur
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	InputMode.SetHideCursorDuringCapture(false);
+	PC->SetInputMode(InputMode);
+	PC->SetShowMouseCursor(true);
+}
+
+void ANLPlayerCharacter::CloseFuseBox()
+{
+	CloseFuseBoxWithBlend(0.4f);
+}
+
+void ANLPlayerCharacter::CloseFuseBoxWithBlend(float BlendTime)
+{
+	const bool bWasOpen = Mode == ENLPlayerMode::UsingFuseBox;
+	if (FuseWidget)
+	{
+		FuseWidget->RemoveFromParent();
+		FuseWidget = nullptr;
+	}
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		PC->SetInputMode(FInputModeGameOnly());
+		PC->SetShowMouseCursor(false);
+		if (bWasOpen) PC->SetViewTargetWithBlend(this, BlendTime, VTBlend_EaseInOut, 2.f);
+	}
+	BodyRig->SetHiddenInGame(false);
+	FlashlightMesh->SetHiddenInGame(false);
+	CarryCanMesh->SetHiddenInGame(false);
+	if (ANLFuseBox* OldBox = CurrentFuseBox.Get()) OldBox->SetViewing(false);
+	CurrentFuseBox.Reset();
+	if (Mode == ENLPlayerMode::UsingFuseBox)
+	{
+		Mode = ENLPlayerMode::Walking;
+		GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	}
+}
+
+void ANLPlayerCharacter::ElectricShock()
+{
+	// Kutudan hızla geri at, normal kameraya dön; ekran elektriklenir ve sallanır
+	CloseFuseBoxWithBlend(0.08f);
+	ShockTime = ShockDuration;
+	UGameplayStatics::PlaySound2D(this, ShockSound);
+	UE_LOG(LogTemp, Log, TEXT("NLPlayer: electric shock (touched a fuse while the switch was ON)"));
+}
+
+void ANLPlayerCharacter::NLDebugFuseUI()
+{
+	FTimerManager& TM = GetWorldTimerManager();
+	auto At = [this, &TM](float Time, TFunction<void()> Fn)
+	{
+		FTimerHandle H;
+		TM.SetTimer(H, FTimerDelegate::CreateWeakLambda(this, [Fn]() { Fn(); }), Time, false);
+	};
+	auto Fuse = [this]() -> ANLFuseBox* { for (TActorIterator<ANLFuseBox> It(GetWorld()); It; ++It) return *It; return nullptr; };
+	auto Shot = [this](const TCHAR* Name, bool bUI)
+	{
+		UE_LOG(LogTemp, Log, TEXT("NLDebugShots: %s"), Name);
+		if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(bUI ? TEXT("shot showui") : TEXT("HighResShot 1280x720"));
+	};
+
+	// Sigorta panelinin önüne geç
+	At(0.3f, [this, Fuse]()
+	{
+		if (ANLFuseBox* F = Fuse())
+		{
+			const FVector C = F->GetComponentsBoundingBox().GetCenter();
+			SetActorLocation(FVector(C.X, C.Y + 150.f, GetActorLocation().Z), false, nullptr, ETeleportType::TeleportPhysics);
+			if (Controller) Controller->SetControlRotation((C - FirstPersonCamera->GetComponentLocation()).Rotation());
+		}
+	});
+	At(1.0f, [Shot]() { Shot(TEXT("70 world: fuse panel"), false); });
+	At(1.3f, [Fuse]() { if (ANLFuseBox* F = Fuse()) F->SabotageWith(false); });   // sigortalar karışık, şalter açık kaldı
+	At(1.9f, [Shot]() { Shot(TEXT("71 world: fuses swapped, switch left ON"), false); });
+
+	At(2.2f, [this, Fuse]() { OpenFuseBox(Fuse()); });
+	At(2.8f, [Shot]() { Shot(TEXT("72 UI: switch ON, fuses wrong"), true); });
+	At(3.0f, [this]() { if (FuseWidget) FuseWidget->TryPickFuse(0); });           // şalter açıkken dokun -> çarpılır
+	At(3.08f, [Shot]() { Shot(TEXT("73 electric shock"), true); });
+	At(3.45f, [Shot]() { Shot(TEXT("74 electric shock (fading)"), true); });
+
+	At(4.4f, [this, Fuse]() { OpenFuseBox(Fuse()); });
+	At(4.6f, [this]() { if (FuseWidget) FuseWidget->ToggleSwitch(); });           // önce şalteri kapat
+	At(5.3f, [Shot]() { Shot(TEXT("75 UI: switch OFF"), true); });
+	// Bir sigortayı tutup panelin üstünde hedef yuvaya doğru sürükle (yarı yolda kare al)
+	At(5.35f, [this, Fuse]()
+	{
+		ANLFuseBox* F = Fuse();
+		APlayerController* PC = Cast<APlayerController>(GetController());
+		if (!F || !FuseWidget || !PC) return;
+		for (int32 j = 0; j < ANLFuseBox::NumFuses; ++j)
+		{
+			const int32 Want = F->GetFuseInSlot(j);
+			if (Want == j) continue;
+			if (FuseWidget->TryPickFuse(j))
+			{
+				const FVector Mid = (F->GetSlotWorldLocation(j) + F->GetSlotWorldLocation(Want)) * 0.5f;
+				const FVector Cam = PC->PlayerCameraManager->GetCameraLocation();
+				F->UpdateDrag(Cam, (Mid - Cam).GetSafeNormal());
+			}
+			break;
+		}
+	});
+	At(5.45f, [Shot]() { Shot(TEXT("75b dragging a fuse on the panel"), true); });
+	At(5.6f, [this, Fuse]()
+	{
+		ANLFuseBox* F = Fuse();
+		if (!F || !FuseWidget) return;
+		FuseWidget->DropFuse(INDEX_NONE);
+		for (int32 i = 0; i < ANLFuseBox::NumFuses; ++i)
+		{
+			if (F->GetFuseInSlot(i) == i) continue;
+			for (int32 j = 0; j < ANLFuseBox::NumFuses; ++j)
+			{
+				if (F->GetFuseInSlot(j) == i && FuseWidget->TryPickFuse(j)) { FuseWidget->DropFuse(i); break; }
+			}
+		}
+	});
+	At(6.0f, [Shot]() { Shot(TEXT("76 UI: fuses fixed, switch still OFF"), true); });
+	At(6.2f, [this]() { if (FuseWidget) FuseWidget->ToggleSwitch(); });           // şalteri aç
+	At(6.9f, [Shot]() { Shot(TEXT("77 UI: power restored"), true); });
+	At(7.1f, [this]() { CloseFuseBox(); });
+	At(7.7f, [Shot]() { Shot(TEXT("78 world: fixed"), false); });
+	At(8.2f, [this]() { if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("quit")); });
+}
+
+void ANLPlayerCharacter::NLDebugFuseMouse()
+{
+	FTimerManager& TM = GetWorldTimerManager();
+	auto At = [this, &TM](float Time, TFunction<void()> Fn)
+	{
+		FTimerHandle H;
+		TM.SetTimer(H, FTimerDelegate::CreateWeakLambda(this, [Fn]() { Fn(); }), Time, false);
+	};
+	auto Fuse = [this]() -> ANLFuseBox* { for (TActorIterator<ANLFuseBox> It(GetWorld()); It; ++It) return *It; return nullptr; };
+	auto PCOf = [this]() { return Cast<APlayerController>(GetController()); };
+	// Sol tuşu gerçek giriş gibi bas / bırak
+	auto Mouse = [PCOf](EInputEvent Ev)
+	{
+		APlayerController* PC = PCOf();
+		if (!PC || !GEngine || !GEngine->GameViewport) return;
+		FInputKeyEventArgs Args(GEngine->GameViewport->Viewport, IPlatformInputDeviceMapper::Get().GetDefaultInputDevice(), EKeys::LeftMouseButton, Ev, FPlatformTime::Cycles64());
+		PC->InputKey(Args);
+	};
+	auto MoveTo = [PCOf](const FVector& World, const FVector2D& Offset)
+	{
+		APlayerController* PC = PCOf();
+		FVector2D S;
+		if (PC && PC->ProjectWorldLocationToScreen(World, S, true)) PC->SetMouseLocation(int32(S.X + Offset.X), int32(S.Y + Offset.Y));
+	};
+	auto Shot = [this](const TCHAR* Name)
+	{
+		UE_LOG(LogTemp, Log, TEXT("NLDebugShots: %s"), Name);
+		if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("shot showui"));
+	};
+	auto Report = [Fuse](const TCHAR* Tag)
+	{
+		if (ANLFuseBox* F = Fuse())
+			UE_LOG(LogTemp, Log, TEXT("NLTest %s: slots=[%d %d %d %d] switch=%s"), Tag, F->GetFuseInSlot(0), F->GetFuseInSlot(1), F->GetFuseInSlot(2), F->GetFuseInSlot(3), F->IsOn() ? TEXT("ON") : TEXT("OFF"));
+	};
+	static int32 From = 0, To = 1;
+
+	At(1.20f, [this, Fuse]()
+	{
+		ANLFuseBox* F = Fuse();
+		if (!F) return;
+		const FVector C = F->GetComponentsBoundingBox().GetCenter();
+		SetActorLocation(FVector(C.X, C.Y + 150.f, GetActorLocation().Z), false, nullptr, ETeleportType::TeleportPhysics);
+		F->SabotageWith(true);   // sigortalar karışık, şalter kapalı
+		OpenFuseBox(F);
+	});
+	At(4.00f, [Report]() { Report(TEXT("before drag")); });
+
+	// 1) Yanlış yuvadaki bir sigortayı tut, kendi yuvasına sürükle, bırak
+	At(4.40f, [Fuse, MoveTo, Mouse]()
+	{
+		ANLFuseBox* F = Fuse();
+		if (!F) return;
+		for (int32 j = 0; j < ANLFuseBox::NumFuses; ++j) { if (F->GetFuseInSlot(j) != j) { From = j; To = F->GetFuseInSlot(j); break; } }
+		MoveTo(F->GetSlotWorldLocation(From), FVector2D::ZeroVector);
+	});
+	At(4.80f, [Mouse]() { Mouse(IE_Pressed); });
+	for (int32 i = 1; i <= 8; ++i)
+	{
+		At(4.80f + i * 0.24f, [Fuse, MoveTo, i]()
+		{
+			if (ANLFuseBox* F = Fuse()) MoveTo(FMath::Lerp(F->GetSlotWorldLocation(From), F->GetSlotWorldLocation(To), i / 8.f), FVector2D::ZeroVector);
+		});
+	}
+	At(5.80f, [Shot]() { Shot(TEXT("81 mouse: dragging a fuse")); });
+	At(7.20f, [Mouse]() { Mouse(IE_Released); });
+	At(8.00f, [Report]() { Report(TEXT("after drag (one fuse should be home)")); });
+
+	// 2) Sadece tıklamak bir şey yapmamalı ve takılı kalmamalı
+	At(8.40f, [Fuse, MoveTo]() { if (ANLFuseBox* F = Fuse()) MoveTo(F->GetSlotWorldLocation(3), FVector2D::ZeroVector); });
+	At(8.80f, [Mouse]() { Mouse(IE_Pressed); });
+	At(9.20f, [Mouse]() { Mouse(IE_Released); });
+	At(9.60f, [Report]() { Report(TEXT("after a plain click (must be unchanged)")); });
+
+	// 3) Şalter koluna basılı tut, yukarı çek, bırak
+	At(10.00f, [Fuse, MoveTo]() { if (ANLFuseBox* F = Fuse()) MoveTo(F->GetLeverWorldLocation(), FVector2D::ZeroVector); });
+	At(10.40f, [Mouse]() { Mouse(IE_Pressed); });
+	for (int32 i = 1; i <= 8; ++i)
+	{
+		At(10.40f + i * 0.20f, [Fuse, MoveTo, i]() { if (ANLFuseBox* F = Fuse()) MoveTo(F->GetLeverWorldLocation(), FVector2D(0.f, -40.f * i)); });
+	}
+	At(11.40f, [Shot]() { Shot(TEXT("82 mouse: dragging the lever up")); });
+	At(12.40f, [Mouse]() { Mouse(IE_Released); });
+	At(14.40f, [Report]() { Report(TEXT("after lever drag up (switch should be ON)")); });
+	At(15.20f, [Shot]() { Shot(TEXT("83 after lever drag")); });
+	At(17.20f, [this]() { if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("quit")); });
+}
+
+void ANLPlayerCharacter::NLDebugFocusShots()
+{
+	FTimerManager& TM = GetWorldTimerManager();
+	auto At = [this, &TM](float Time, TFunction<void()> Fn)
+	{
+		FTimerHandle H;
+		TM.SetTimer(H, FTimerDelegate::CreateWeakLambda(this, [Fn]() { Fn(); }), Time, false);
+	};
+	auto Place = [this](const FVector& Target, const FVector& Offset, const FVector& AimOffset)
+	{
+		SetActorLocation(FVector(Target.X + Offset.X, Target.Y + Offset.Y, GetActorLocation().Z), false, nullptr, ETeleportType::TeleportPhysics);
+		if (Controller) Controller->SetControlRotation(((Target + AimOffset) - FirstPersonCamera->GetComponentLocation()).Rotation());
+	};
+	auto Shot = [this](const TCHAR* Name)
+	{
+		UE_LOG(LogTemp, Log, TEXT("NLDebugShots: %s -> focused: %s"), Name, *GetNameSafe(FocusedActor.Get()));
+		if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("shot showui"));
+	};
+	auto Center = [this](UClass* Cls) { for (TActorIterator<AActor> It(GetWorld(), Cls); It; ++It) return It->GetComponentsBoundingBox().GetCenter(); return FVector::ZeroVector; };
+
+	// 1) Şarj istasyonunun dibinde (60 cm), ona bakarken
+	At(0.5f, [Place, Center]() { Place(Center(ANLFlashlightCharger::StaticClass()), FVector(0.f, 60.f, 0.f), FVector::ZeroVector); });
+	At(2.5f, [Shot]() { Shot(TEXT("91 right next to the charger")); });
+	// 2) Jeneratöre yakın (1.5 m), artı jeneratörün biraz yanında
+	At(3.5f, [Place, Center]() { Place(Center(ANLGenerator::StaticClass()), FVector(0.f, 150.f, 0.f), FVector(70.f, 0.f, 40.f)); });
+	At(5.5f, [Shot]() { Shot(TEXT("92 near the generator, crosshair slightly off")); });
+	// 3) Boşluğa bak: odak yok, artı küçük
+	At(6.5f, [this]() { if (Controller) Controller->SetControlRotation(FRotator(10.f, GetActorRotation().Yaw + 180.f, 0.f)); });
+	At(8.5f, [Shot]() { Shot(TEXT("93 looking at nothing")); });
+	At(9.5f, [this]() { if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("quit")); });
+}
+
+void ANLPlayerCharacter::NLDebugLook(float X, float Y, float Pitch, float Yaw)
+{
+	SetActorLocation(FVector(X, Y, GetActorLocation().Z), false, nullptr, ETeleportType::TeleportPhysics);
+	if (Controller) Controller->SetControlRotation(FRotator(Pitch, Yaw, 0.f));
+	FTimerHandle H;
+	GetWorldTimerManager().SetTimer(H, FTimerDelegate::CreateWeakLambda(this, [this]()
+	{
+		if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("HighResShot 1280x720"));
+	}), 1.5f, false);
+}
+
+// ------------------------------------------------------------------ Saklanma kapısı
+
+void ANLPlayerCharacter::EnterDoorHold(ANLHideDoor* Door)
+{
+	if (!Door || Mode != ENLPlayerMode::Walking) return;
+	Mode = ENLPlayerMode::HoldingDoor;
+	HoldDoor = Door;
+	HoldTimer = 0.f;
+	HoldFromLocation = GetActorLocation();
+	FocusedActor.Reset();
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->DisableMovement();
+}
+
+void ANLPlayerCharacter::ExitDoorHold()
+{
+	if (Mode != ENLPlayerMode::HoldingDoor) return;
+	Mode = ENLPlayerMode::Walking;
+	HoldDoor.Reset();
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+}
+
+void ANLPlayerCharacter::NLDebugDoor(int32 Win)
+{
+	ANLHideDoor* Door = nullptr;
+	for (TActorIterator<ANLHideDoor> It(GetWorld()); It; ++It) { Door = *It; break; }
+	if (!Door) { UE_LOG(LogTemp, Warning, TEXT("NLDebugDoor: no ANLHideDoor in the level")); return; }
+
+	FTimerManager& TM = GetWorldTimerManager();
+	auto At = [this, &TM](float Time, TFunction<void()> Fn)
+	{
+		FTimerHandle H;
+		TM.SetTimer(H, FTimerDelegate::CreateWeakLambda(this, [Fn]() { Fn(); }), Time, false);
+	};
+	auto Shot = [this](const TCHAR* Name)
+	{
+		UE_LOG(LogTemp, Log, TEXT("NLDebugShots: %s"), Name);
+		if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("shot showui"));
+	};
+	const FTransform DT = Door->GetActorTransform();
+	const float Z = GetActorLocation().Z;
+
+	// 1) Koridordan açık kapıya bak
+	At(0.5f, [this, DT, Z]()
+	{
+		const FVector P = DT.TransformPosition(FVector(-330.f, -60.f, 0.f));
+		SetActorLocation(FVector(P.X, P.Y, Z), false, nullptr, ETeleportType::TeleportPhysics);
+		if (Controller) Controller->SetControlRotation((DT.TransformPosition(FVector(0.f, 0.f, 120.f)) - FirstPersonCamera->GetComponentLocation()).Rotation());
+	});
+	At(3.f, [Shot]() { Shot(TEXT("101 open door from the hallway")); });
+	// 2) Odanın içine geç, Runner kovalıyor, kapıyı kapat (E)
+	At(4.f, [this, DT, Z]()
+	{
+		const FVector P = DT.TransformPosition(FVector(150.f, 10.f, 0.f));
+		SetActorLocation(FVector(P.X, P.Y, Z), false, nullptr, ETeleportType::TeleportPhysics);
+		if (Controller) Controller->SetControlRotation(FRotator(-5.f, DT.Rotator().Yaw + 180.f + 25.f, 0.f));
+		if (ANLGameMode* GM = GetWorld()->GetAuthGameMode<ANLGameMode>()) GM->RequestRunnerChase(this);
+		if (!Flashlight->IsOn()) Flashlight->Toggle();
+	});
+	At(6.f, [this, Door]() { if (Door->IsOpen()) Door->Interact(this); });
+	At(6.4f, [Shot]() { Shot(TEXT("102 door closing")); });
+	At(7.8f, [Shot]() { Shot(TEXT("103 camera turned to the handle, panting")); });
+
+	FTimerHandle Poll;
+	TM.SetTimer(Poll, FTimerDelegate::CreateWeakLambda(this, [this, Door, Win, Shot]()
+	{
+		static int32 State = 0;
+		if (State == 0 && Mode == ENLPlayerMode::HoldingDoor)
+		{
+			State = 1;
+			UE_LOG(LogTemp, Log, TEXT("NLDebugDoor: hold started"));
+		}
+		if (State == 1 && Door->IsCheckWindowOpen() && Door->GetNeedlePosition() > 0.15f)
+		{
+			State = 2;
+			Shot(TEXT("104 runner forcing the door, handle down, SPACE check"));
+			if (Win) Door->SetDebugAutoResult(1);
+			FTimerHandle A, B;
+			GetWorldTimerManager().SetTimer(A, FTimerDelegate::CreateWeakLambda(this, [this]() { DebugThirdPerson(true, FVector(-10.f, 190.f, 45.f)); }), 0.05f, false);
+			GetWorldTimerManager().SetTimer(B, FTimerDelegate::CreateWeakLambda(this, [this, Shot]() { Shot(TEXT("104b side view: holding the door")); }), 0.4f, false);
+			FTimerHandle C;
+			GetWorldTimerManager().SetTimer(C, FTimerDelegate::CreateWeakLambda(this, [this]() { DebugThirdPerson(false); }), 0.6f, false);
+		}
+		if (State == 2 && Win) Door->SetDebugAutoResult(1);   // düşük FPS'te ibre bölgeyi atlamasın diye kapı kendisi basar
+		if (State == 2 && !Win && Mode == ENLPlayerMode::Dead)
+		{
+			State = 3;
+			FTimerManager& T = GetWorldTimerManager();
+			FTimerHandle A, B, Q;
+			T.SetTimer(A, FTimerDelegate::CreateWeakLambda(this, [Shot]() { Shot(TEXT("105 door burst open, jumpscare")); }), 0.25f, false);
+			T.SetTimer(B, FTimerDelegate::CreateWeakLambda(this, [Shot]() { Shot(TEXT("106 jumpscare grab")); }), 0.7f, false);
+			FTimerHandle S1, S2;
+			T.SetTimer(S1, FTimerDelegate::CreateWeakLambda(this, [this]() { DebugThirdPerson(true, FVector(-40.f, -200.f, 80.f)); }), 1.0f, false);
+			T.SetTimer(S2, FTimerDelegate::CreateWeakLambda(this, [Shot]() { Shot(TEXT("107 jumpscare side view")); }), 1.3f, false);
+			T.SetTimer(Q, FTimerDelegate::CreateWeakLambda(this, [this]() { if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("quit")); }), 1.9f, false);
+		}
+		if (State == 2 && Win && Mode == ENLPlayerMode::Walking)
+		{
+			State = 3;
+			FTimerManager& T = GetWorldTimerManager();
+			FTimerHandle A, Q;
+			T.SetTimer(A, FTimerDelegate::CreateWeakLambda(this, [Shot]() { Shot(TEXT("105 runner left, player free")); }), 1.0f, false);
+			T.SetTimer(Q, FTimerDelegate::CreateWeakLambda(this, [this]() { if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("quit")); }), 2.5f, false);
+		}
+	}), 0.01f, true);
+	At(80.f, [this]() { if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("quit")); });
+}
+
+// ------------------------------------------------------------------ Koşma / stamina
+
+void ANLPlayerCharacter::UpdateStamina(float DeltaSeconds)
+{
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	const bool bShift = PC && (PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::RightShift));
+	const bool bMoving = GetVelocity().Size2D() > 60.f && GetCharacterMovement()->IsMovingOnGround();
+	const bool bCanSprint = Mode == ENLPlayerMode::Walking && !IsBusy() && !bExhausted && Stamina > 0.f;
+	bSprinting = bShift && bMoving && bCanSprint;
+
+	if (bSprinting)
+	{
+		Stamina = FMath::Max(0.f, Stamina - DeltaSeconds / FMath::Max(SprintDuration, 0.1f));
+		StaminaRegenTimer = StaminaRegenDelay;
+		if (Stamina <= 0.f)
+		{
+			bExhausted = true;   // tükendi: bir süre koşamaz
+			bDepleted = true;    // tamamen dolana kadar yavaş dolar (bar soluk gri)
+			bSprinting = false;
+		}
+	}
+	else
+	{
+		StaminaRegenTimer -= DeltaSeconds;
+		if (StaminaRegenTimer <= 0.f)
+		{
+			// Dururken daha hızlı dolar; sıfırlandıysa daha yavaş
+			float Rate = (bMoving ? 1.f : 1.5f) / FMath::Max(StaminaRegenTime, 0.1f);
+			if (bDepleted) Rate *= DepletedRegenMultiplier;
+			Stamina = FMath::Min(1.f, Stamina + DeltaSeconds * Rate);
+		}
+		if (bExhausted && Stamina >= ExhaustedRecover) bExhausted = false;
+	}
+	if (bDepleted && Stamina >= 0.999f) bDepleted = false;
+
+	if (Mode == ENLPlayerMode::Walking || Mode == ENLPlayerMode::HoldingDoor)
+	{
+		const float Target = bSprinting ? SprintSpeed : WalkSpeed;
+		UCharacterMovementComponent* Move = GetCharacterMovement();
+		Move->MaxWalkSpeed = FMath::FInterpTo(Move->MaxWalkSpeed, Target, DeltaSeconds, bSprinting ? 5.f : 3.f);
+	}
+
+	// Nefes nefese: stamina azaldıkça duyulur (kapıyı tutarken kapının kendi nefesi çalar)
+	const float WantPant = (Mode == ENLPlayerMode::Dead || Mode == ENLPlayerMode::HoldingDoor) ? 0.f
+		: FMath::Clamp((0.7f - Stamina) / 0.6f, 0.f, 1.f) * 0.75f * (1.f - ExhaustAlpha);
+	PantingVolume = FMath::FInterpTo(PantingVolume, WantPant, DeltaSeconds, 1.5f);
+	if (PantingLoop)
+	{
+		if (PantingVolume > 0.02f)
+		{
+			if (!PantingAudio->IsPlaying()) PantingAudio->Play();
+			PantingAudio->SetVolumeMultiplier(PantingVolume * 0.8f);
+		}
+		else if (PantingAudio->IsPlaying())
+		{
+			PantingAudio->Stop();
+		}
+	}
+
+	// --- Tükenme: derin nefes + ekran nefesle birlikte gri-normal atar ---
+	const bool bExhaustFx = bExhausted && Mode != ENLPlayerMode::Dead;
+	if (bExhaustFx && !bWasExhausted)
+	{
+		// Nefes sesi ve griliği aynı anda başlat (senkron)
+		ExhaustPhase = 0.f;
+		if (ExhaustedBreathLoop)
+		{
+			ExhaustedBreathAudio->Stop();
+			ExhaustedBreathAudio->Play();
+		}
+	}
+	bWasExhausted = bExhaustFx;
+	ExhaustAlpha = FMath::FInterpTo(ExhaustAlpha, bExhaustFx ? 1.f : 0.f, DeltaSeconds, bExhaustFx ? 6.f : 1.2f);
+	ExhaustPhase = FMath::Fmod(ExhaustPhase + DeltaSeconds / FMath::Max(ExhaustedBreathPeriod, 0.2f), 1.f);
+	if (ExhaustedBreathLoop)
+	{
+		if (ExhaustAlpha > 0.02f)
+		{
+			if (!ExhaustedBreathAudio->IsPlaying()) ExhaustedBreathAudio->Play();
+			ExhaustedBreathAudio->SetVolumeMultiplier(ExhaustAlpha);
+		}
+		else if (ExhaustedBreathAudio->IsPlaying())
+		{
+			ExhaustedBreathAudio->Stop();
+		}
+	}
+
+	// İçe çekişte (nefesin başı) gri, verişte normale döner
+	const float Gray = ExhaustAlpha * FMath::SmoothStep(0.f, 1.f, 0.5f + 0.5f * FMath::Cos(2.f * PI * (ExhaustPhase - 0.18f)));
+	const float Sat = FMath::Lerp(1.f, ExhaustedSaturation, Gray);
+	if (FMath::Abs(Sat - AppliedSaturation) > 0.003f)
+	{
+		AppliedSaturation = Sat;
+		FPostProcessSettings& PP = FirstPersonCamera->PostProcessSettings;
+		PP.bOverride_ColorSaturation = Sat < 0.999f;
+		PP.ColorSaturation = FVector4(Sat, Sat, Sat, 1.f);
+		// Gri anlarda hafif kararma da olsun ki fark belli olsun
+		PP.bOverride_ColorGain = Sat < 0.999f;
+		const float Gain = FMath::Lerp(1.f, 0.82f, Gray);
+		PP.ColorGain = FVector4(Gain, Gain, Gain, 1.f);
+		FirstPersonCamera->PostProcessBlendWeight = 1.f;
+	}
+}
+
+void ANLPlayerCharacter::NLDebugStamina()
+{
+	// Gösterge: dolu (gizli), koşarken, azalmış, tükenmiş halleri
+	FTimerManager& TM = GetWorldTimerManager();
+	auto At = [this, &TM](float Time, TFunction<void()> Fn)
+	{
+		FTimerHandle H;
+		TM.SetTimer(H, FTimerDelegate::CreateWeakLambda(this, [Fn]() { Fn(); }), Time, false);
+	};
+	auto Shot = [this](const TCHAR* Name)
+	{
+		UE_LOG(LogTemp, Log, TEXT("NLDebugShots: %s stamina=%.2f sprint=%d exhausted=%d speed=%.0f"), Name, Stamina, bSprinting ? 1 : 0, bExhausted ? 1 : 0, GetVelocity().Size2D());
+		if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("shot showui"));
+	};
+	// Gerçek Shift tuşu: ileri yürürken bas, hız ve stamina loglanır
+	auto Shift = [this](EInputEvent Ev)
+	{
+		APlayerController* PC = Cast<APlayerController>(GetController());
+		if (!PC || !GEngine || !GEngine->GameViewport) return;
+		FInputKeyEventArgs Args(GEngine->GameViewport->Viewport, IPlatformInputDeviceMapper::Get().GetDefaultInputDevice(), EKeys::LeftShift, Ev, FPlatformTime::Cycles64());
+		PC->InputKey(Args);
+	};
+	At(0.3f, [this]() { bDebugWalk = true; });
+	At(1.3f, [this]() { UE_LOG(LogTemp, Log, TEXT("NLDebugStamina: walking speed=%.0f stamina=%.2f"), GetVelocity().Size2D(), Stamina); });
+	At(1.4f, [Shift]() { Shift(IE_Pressed); });
+	At(2.9f, [this]() { UE_LOG(LogTemp, Log, TEXT("NLDebugStamina: sprinting=%d speed=%.0f stamina=%.2f"), bSprinting ? 1 : 0, GetVelocity().Size2D(), Stamina); });
+	At(3.0f, [this, Shift]() { Shift(IE_Released); bDebugWalk = false; });
+	At(3.5f, [this]() { Stamina = 0.75f; StaminaRegenTimer = 100.f; });
+	At(5.5f, [Shot]() { Shot(TEXT("111 stamina 75%")); });
+	At(6.f, [this]() { Stamina = 0.35f; });
+	At(8.f, [Shot]() { Shot(TEXT("112 stamina 35%")); });
+	At(8.5f, [this]() { Stamina = 0.f; bExhausted = true; });
+	At(10.5f, [Shot]() { Shot(TEXT("113 exhausted")); });
+	// Gri tepe (faz ~0.18) ve normal an (faz ~0.68)
+	FTimerHandle GrayPoll;
+	TM.SetTimer(GrayPoll, FTimerDelegate::CreateWeakLambda(this, [this, Shot]()
+	{
+		static int32 Step = 0;
+		if (!bExhausted || GetWorld()->GetTimeSeconds() < 11.f) return;
+		if (Step == 0 && ExhaustPhase > 0.16f && ExhaustPhase < 0.3f) { Step = 1; Shot(TEXT("114 exhausted, gray")); }
+		else if (Step == 1 && ExhaustPhase > 0.62f && ExhaustPhase < 0.78f) { Step = 2; Shot(TEXT("115 exhausted, normal")); }
+	}), 0.01f, true);
+	// Sıfırlanmış (soluk gri, yavaş dolan) ile normal dolumu karşılaştır
+	At(14.f, [this]() { Stamina = 0.6f; bExhausted = false; bDepleted = true; StaminaRegenTimer = 100.f; });
+	At(16.f, [Shot]() { Shot(TEXT("116 depleted 60%")); });
+	static float RegenStart = 0.f;
+	At(16.2f, [this]() { StaminaRegenTimer = 0.f; RegenStart = Stamina; });
+	At(17.2f, [this]() { UE_LOG(LogTemp, Log, TEXT("NLDebugStamina: depleted regen per sec=%.3f"), Stamina - RegenStart); Stamina = 0.6f; bDepleted = false; RegenStart = Stamina; });
+	At(18.2f, [this]() { UE_LOG(LogTemp, Log, TEXT("NLDebugStamina: normal regen per sec=%.3f"), Stamina - RegenStart); Stamina = 0.6f; StaminaRegenTimer = 100.f; });
+	At(20.f, [Shot]() { Shot(TEXT("117 normal 60%")); });
+	At(20.5f, [this]() { if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("quit")); });
 }

@@ -248,12 +248,14 @@ FVector ANLHideDoor::GetHandleGripLocation() const
 
 FVector ANLHideDoor::GetDoorPalmLocation() const
 {
-	return Hinge->GetComponentTransform().TransformPosition(FVector(DoorThickness * 0.5f + 3.f, DoorWidth * 0.42f, HandleHeight + 38.f));
+	// Diğer el: gövdenin öbür yanında, omuz hizasında kapıya yaslı (kapıyı iter)
+	return Hinge->GetComponentTransform().TransformPosition(FVector(DoorThickness * 0.5f + 3.f, DoorWidth - 12.f - 52.f, HandleHeight + 52.f));
 }
 
 FVector ANLHideDoor::GetHoldStandLocation(float CapsuleHalfHeight) const
 {
-	const FVector Floor = GetActorTransform().TransformPosition(FVector(GetDoorPlaneX() + 40.f, DoorWidth * 0.5f - 30.f, 0.f));
+	// Kapının dibinde, yüzü kapıya dönük; kolun hizasında (kol, gövdenin hafif yanında kalır)
+	const FVector Floor = GetActorTransform().TransformPosition(FVector(GetDoorPlaneX() + DoorThickness * 0.5f + 46.f, DoorWidth * 0.5f - 12.f - 24.f, 0.f));
 	return Floor + FVector(0.f, 0.f, CapsuleHalfHeight + 2.f);
 }
 

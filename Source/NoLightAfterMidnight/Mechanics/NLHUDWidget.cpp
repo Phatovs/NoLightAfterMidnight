@@ -126,9 +126,14 @@ void UNLHUDWidget::BuildDefaultLayout()
 		NoPower->SetContent(T);
 	}
 
+	// ---- Güç teşhisi (masada; elektrik yokken de görünür) ----
+	BuildDiagPanel(Root);
+	BuildObjective(Root);
+
 	// ---- Her zaman görünenler ----
 	// Gece ve saat yürürken gösterilmez (kamera ekranında var). Yazılı "FLASHLIGHT" etiketi de yok, sadece pil barı.
 	GeneratorStatusText = MakeText(Root, TEXT("GeneratorStatusText"), TEXT(""), 24, FVector2D(0.5f, 0), FVector2D(0.5f, 0), FVector2D(0, 60), Red);
+	GeneratorStatusText->SetJustification(ETextJustify::Center);
 	InteractPromptText  = MakeText(Root, TEXT("InteractPromptText"), TEXT(""), 20, FVector2D(0.5f, 0.6f), FVector2D(0.5f, 0.5f), FVector2D::ZeroVector);
 
 	// Ortadaki artı: oyuncu neye bakıp tıklayacağını görsün
@@ -655,19 +660,10 @@ void UNLHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 		LastCameraIndex = INDEX_NONE;
 	}
 
-	if (GeneratorStatusText)
-	{
-		FString Status;
-		if (Generator)
-		{
-			if (Generator->IsBroken()) Status = TEXT("GENERATOR BROKEN!");
-			else if (Generator->GetFuelPercent() <= 0.f) Status = TEXT("OUT OF FUEL!");
-			else if (Generator->GetFuelPercent() < 0.15f) Status = TEXT("FUEL LOW");
-		}
-		if (Status.IsEmpty() && Power && Power->GetFuseBox() && Power->GetFuseBox()->IsTripped()) Status = TEXT("FUSES SWAPPED! FIX THE FUSE BOX");
-		if (Status.IsEmpty() && !bHasPower && Generator) Status = TEXT("NO POWER");
-		GeneratorStatusText->SetText(FText::FromString(Status));
-	}
+	// Arıza ekranda yazmaz: oyuncu sesten anlar (jeneratör/şalter sesi, elektrik kesilme sesi). Ayrıntı sadece masadaki teşhis panelinde.
+	TickDiagPanel(InDeltaTime, bAtMonitor, Power);
+	TickObjective(InDeltaTime, Player, GM);
+	SetShown(GeneratorStatusText, false);
 
 	// --- Tamir barı ---
 	const ANLGenerator* RepairGen = Player->GetCurrentGenerator();

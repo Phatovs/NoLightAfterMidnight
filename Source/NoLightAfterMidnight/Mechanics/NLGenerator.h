@@ -118,6 +118,8 @@ protected:
 
 	// ---- Sesler ----
 	UPROPERTY(EditAnywhere, Category = "NL|Audio") TObjectPtr<USoundBase> HumLoopSound;
+	// Motor uğultusunun duyulduğu mesafe (cm, 5 m'den sonra kısılmaya başlar)
+	UPROPERTY(EditAnywhere, Category = "NL|Audio") float HumHearDistance = 3500.f;
 	UPROPERTY(EditAnywhere, Category = "NL|Audio") TObjectPtr<USoundBase> EngineStartSound;
 	UPROPERTY(EditAnywhere, Category = "NL|Audio") TObjectPtr<USoundBase> EngineStopSound;
 	UPROPERTY(EditAnywhere, Category = "NL|Audio") TObjectPtr<USoundBase> BreakdownSound;
@@ -131,6 +133,8 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "NL|Animation") TObjectPtr<UAnimMontage> PlayerRefuelMontage;
 	// Benzin dökme hareketinin süresi (sn)
 	UPROPERTY(EditAnywhere, Category = "NL|Animation") float RefuelActionDuration = 2.8f;
+	// Benzin ağzı (jeneratörün yerel koordinatı, cm). Sıfırsa kutunun üstü kullanılır; büyük bina gibi meshlerde elle ayarlayın.
+	UPROPERTY(EditAnywhere, Category = "NL|Fuel") FVector FuelInletOffset = FVector::ZeroVector;
 
 private:
 	float Fuel = 0.f;

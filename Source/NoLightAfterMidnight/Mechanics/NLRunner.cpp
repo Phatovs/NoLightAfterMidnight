@@ -118,6 +118,10 @@ void ANLRunner::Tick(float DeltaSeconds)
 			bPendingChase = false;
 			ChaseTarget.Reset();
 		}
+		else if (PendingDelay > 0.f)
+		{
+			PendingDelay -= DeltaSeconds;   // pusu: çığlıktan sonra bekler
+		}
 		else if (Waiting->GetMode() != ENLPlayerMode::Repairing)
 		{
 			StartChase(Waiting, PendingSpawn);
@@ -168,6 +172,7 @@ void ANLRunner::PrepareChase(ANLPlayerCharacter* Target)
 
 	ChaseTarget = Target;
 	bPendingChase = true;
+	PendingDelay = 0.f;
 	PendingSpawn = FindSpawnPoint(Target);
 	// Uzaktan gelen çığlık: geliyor. Henüz koşmaz, oyuncu tamirden çıkınca başlar.
 	UGameplayStatics::PlaySoundAtLocation(this, ChaseStartScream, PendingSpawn.GetLocation());
@@ -175,7 +180,26 @@ void ANLRunner::PrepareChase(ANLPlayerCharacter* Target)
 		*PendingSpawn.GetLocation().ToCompactString(), FVector::Dist(PendingSpawn.GetLocation(), Target->GetActorLocation()));
 }
 
+void ANLRunner::PrepareAmbush(ANLPlayerCharacter* Target, float Delay, float MinDistance, float MaxDistance)
+{
+	if (bChasing || bPendingChase || bDoorAssault || !Target) return;
+
+	ChaseTarget = Target;
+	bPendingChase = true;
+	PendingDelay = FMath::Max(Delay, 0.f);
+	PendingSpawn = FindSpawnPoint(Target, MinDistance, MaxDistance);
+	// Uyarı: uzaktan gelen çığlık, mesafeden bağımsız net duyulur (oyuncuya saklanma fırsatı)
+	UGameplayStatics::PlaySound2D(this, ChaseStartScream, 0.9f);
+	UE_LOG(LogNLRunner, Log, TEXT("Runner ambush: scream, will chase in %.1f s from %s (%.0f cm)"), PendingDelay,
+		*PendingSpawn.GetLocation().ToCompactString(), FVector::Dist(PendingSpawn.GetLocation(), Target->GetActorLocation()));
+}
+
 FTransform ANLRunner::FindSpawnPoint(const ANLPlayerCharacter* Target) const
+{
+	return FindSpawnPoint(Target, SpawnMinDistance, SpawnMaxDistance);
+}
+
+FTransform ANLRunner::FindSpawnPoint(const ANLPlayerCharacter* Target, float MinDistance, float MaxDistance) const
 {
 	// Oyuncunun ulaşılabilir NavMesh noktalarından: yeterince uzak ve tercihen görüş dışı olanı seç
 	FTransform Best = HomeTransform;
@@ -189,9 +213,9 @@ FTransform ANLRunner::FindSpawnPoint(const ANLPlayerCharacter* Target) const
 	for (int32 i = 0; i < 32; ++i)
 	{
 		FNavLocation P;
-		if (!Nav->GetRandomReachablePointInRadius(From, SpawnMaxDistance, P)) continue;
+		if (!Nav->GetRandomReachablePointInRadius(From, MaxDistance, P)) continue;
 		const float D = FVector::Dist2D(P.Location, From);
-		if (D < SpawnMinDistance) continue;
+		if (D < MinDistance) continue;
 
 		FHitResult Hit;
 		FCollisionQueryParams Params(SCENE_QUERY_STAT(NLRunnerSpawn), false, Target);

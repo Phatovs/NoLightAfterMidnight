@@ -40,7 +40,9 @@ protected:
 	UPROPERTY(EditInstanceOnly, Category = "NL|Setup") TObjectPtr<ANLSecurityDesk> Desk;
 
 	// Gün başında ilk belirme
-	UPROPERTY(EditAnywhere, Category = "NL|Timing") float FirstAppearanceDelay = 25.f;
+	UPROPERTY(EditAnywhere, Category = "NL|Timing") float FirstAppearanceDelay = 40.f;
+	// İlk gece daha uzun: oyuncu rıhtımdan fenere yürüyüp etrafa baksın
+	UPROPERTY(EditAnywhere, Category = "NL|Timing") float FirstNightAppearanceDelay = 120.f;
 	// Kaçtıktan sonra başka kamerada belirme aralığı
 	UPROPERTY(EditAnywhere, Category = "NL|Timing") float MinRelocateDelay = 6.f;
 	UPROPERTY(EditAnywhere, Category = "NL|Timing") float MaxRelocateDelay = 15.f;
@@ -56,6 +58,15 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "NL|Rules", meta = (ClampMin = "1")) int32 MissesBeforeAttack = 2;
 	// Saldırı animasyonundan sonra game over ekranına geçiş
 	UPROPERTY(EditAnywhere, Category = "NL|Rules") float ExtraDelayAfterJumpscare = 0.3f;
+	// Oyuncu dışarıdayken el fenerini Drowned'a tutarsa kovalar: menzil (cm) ve ne kadar süre tutulması gerektiği (sn)
+	UPROPERTY(EditAnywhere, Category = "NL|Rules") float FlashlightRepelRange = 1800.f;
+	UPROPERTY(EditAnywhere, Category = "NL|Rules") float FlashlightRepelTime = 0.35f;
+	// Koşarak gelme bu süreyi aşarsa yerine ışınlanır (sn)
+	UPROPERTY(EditAnywhere, Category = "NL|Timing") float MaxArriveTime = 20.f;
+	// Kaos kuralı: koşucu kovalarken / bağırıp gelirken ya da elektrik arızalıyken (jeneratör bozuk, şalter atmış, yakıt bitti)
+	// Drowned gelmez; kameradaysa geri koşup çekilir. Her şey düzelince bu kadar sn sakin kalınca tekrar gelebilir.
+	UPROPERTY(EditAnywhere, Category = "NL|Rules") bool bHoldDuringChaos = true;
+	UPROPERTY(EditAnywhere, Category = "NL|Timing") float CalmDelayAfterChaos = 12.f;
 
 	UPROPERTY(EditAnywhere, Category = "NL|Audio") TObjectPtr<USoundBase> LeaveMapSound;
 	UPROPERTY(EditAnywhere, Category = "NL|Audio") TObjectPtr<USoundBase> ReturnSound;
@@ -77,6 +88,19 @@ private:
 	int32 MissCount = 0;
 	int32 CurrentDay = 1;
 	bool bFleePhase = false;
+	float FlashlightLitTime = 0.f;
+	float CalmTimer = 0.f;
+	bool bChaosLogged = false;
+	// Koşucu kovalıyor mu ya da elektrik arızası var mı (OutWhy: log için sebep)
+	bool IsChaos(const TCHAR*& OutWhy) const;
+	void StartFlinch();
+	bool IsLitByPlayerFlashlight() const;
+
+public:
+	ANLDrowned* GetDrowned() const { return Drowned; }
+	// Test: hemen bir kamerada belir (Index < 0: rastgele)
+	void DebugAppear(int32 Index);
+private:
 
 	void SetState(ENLDrownedState NewState, float Duration);
 	void AppearAtRandomCamera();

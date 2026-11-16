@@ -124,6 +124,7 @@ void ANLFuseBox::BeginPlay()
 
 	SlotFuse.SetNum(NumFuses);
 	for (int32 i = 0; i < NumFuses; ++i) SlotFuse[i] = i;
+	SlotTarget = SlotFuse;
 
 	// Renkler: BasicShapeMaterial "Color" parametresi
 	UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
@@ -138,7 +139,8 @@ void ANLFuseBox::BeginPlay()
 	MakeMID(PanelMesh, FLinearColor(0.09f, 0.09f, 0.1f));
 	for (int32 i = 0; i < SlotPlates.Num(); ++i)
 	{
-		MakeMID(SlotPlates[i], GetFuseColor(i) * 0.45f);
+		// Yuvalar renksiz: hangi rengin nereye gittiği sadece masadaki monitörde yazar
+		MakeMID(SlotPlates[i], FLinearColor(0.16f, 0.16f, 0.17f));
 	}
 	for (UStaticMeshComponent* Cap : FuseCaps)
 	{
@@ -165,7 +167,7 @@ bool ANLFuseBox::AreFusesCorrect() const
 {
 	for (int32 i = 0; i < SlotFuse.Num(); ++i)
 	{
-		if (SlotFuse[i] != i) return false;
+		if (SlotFuse[i] != GetTargetFuse(i)) return false;
 	}
 	return true;
 }
@@ -190,6 +192,20 @@ void ANLFuseBox::SetOn(bool bNewOn)
 	ApplyVisuals();
 	OnSwitched.Broadcast(bOn);
 	RefreshPower();
+
+	// Sigortalar yanlış diziliyken şalter kaldırıldı: kıvılcım, kol geri düşer
+	if (bOn && !AreFusesCorrect() && HasActorBegunPlay())
+	{
+		UE_LOG(LogTemp, Log, TEXT("NLFuseBox: switch raised with wrong wiring -> kicks back"));
+		TWeakObjectPtr<ANLFuseBox> WeakThis(this);
+		GetWorldTimerManager().SetTimer(KickbackTimer, FTimerDelegate::CreateWeakLambda(this, [WeakThis]()
+		{
+			ANLFuseBox* B = WeakThis.Get();
+			if (!B || !B->bOn || B->AreFusesCorrect()) return;
+			if (UNLPowerSubsystem* P = B->GetWorld()->GetSubsystem<UNLPowerSubsystem>()) P->PlayFarEvent(B->TripSound, B->GetActorLocation());
+			B->SetOn(false);
+		}), FMath::Max(0.05f, WrongWiringKickback), false);
+	}
 }
 
 void ANLFuseBox::SwapFuses(int32 SlotA, int32 SlotB)
@@ -210,6 +226,16 @@ void ANLFuseBox::SabotageWith(bool bSwitchOff)
 {
 	// Sigortaları karıştır (doğru dizilime denk gelmesin)
 	if (SlotFuse.Num() != NumFuses) return;
+	// Kablolamayı değiştir: yeni doğru sıra (monitörde görünür)
+	if (bRandomizeWiring && SlotTarget.Num() == NumFuses)
+	{
+		// Bir öncekiyle aynı sıra çıkmasın
+		const TArray<int32> Prev = SlotTarget;
+		do
+		{
+			for (int32 i = NumFuses - 1; i > 0; --i) SlotTarget.Swap(i, FMath::RandRange(0, i));
+		} while (SlotTarget == Prev);
+	}
 	do
 	{
 		for (int32 i = NumFuses - 1; i > 0; --i)
@@ -226,9 +252,12 @@ void ANLFuseBox::SabotageWith(bool bSwitchOff)
 		OnSwitched.Broadcast(bOn);
 	}
 
-	if (UNLPowerSubsystem* Power = GetWorld()->GetSubsystem<UNLPowerSubsystem>()) Power->MarkFailureActive();
-	UE_LOG(LogTemp, Log, TEXT("NLFuseBox: fuses swapped by saboteur, switch left %s (game time %.0f s)"), bOn ? TEXT("ON") : TEXT("OFF"), GetWorld()->GetTimeSeconds());
-	UGameplayStatics::PlaySoundAtLocation(this, TripSound, GetActorLocation());
+	UNLPowerSubsystem* Power = GetWorld()->GetSubsystem<UNLPowerSubsystem>();
+	if (Power) Power->MarkFailureActive();
+	UE_LOG(LogTemp, Log, TEXT("NLFuseBox: fuses swapped by saboteur, switch left %s, new wiring [%d %d %d %d] (game time %.0f s)"), bOn ? TEXT("ON") : TEXT("OFF"), SlotTarget[0], SlotTarget[1], SlotTarget[2], SlotTarget[3], GetWorld()->GetTimeSeconds());
+	// Sabotaj: kıvılcım + şalter düşmesi kulübe yönünden adanın her yerinden duyulur
+	if (Power) Power->PlayFarEvent(TripSound, GetActorLocation());
+	if (bSwitchOff && Power) Power->PlayFarEvent(SwitchOffSound, GetActorLocation(), 0.8f);
 	ApplyFuseVisuals();
 	RefreshPower();
 }

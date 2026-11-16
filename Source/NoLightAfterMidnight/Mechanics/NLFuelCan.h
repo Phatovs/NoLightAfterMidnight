@@ -22,7 +22,12 @@ public:
 	virtual FText GetInteractPrompt(const ANLPlayerCharacter* Player) const override;
 	virtual bool CanInteract(const ANLPlayerCharacter* Player) const override;
 
+	// Oyuncu bidonu yere bırakır (G). Bu bidon yeniden kulübede belirmişse yerine yeni bir bidon konur.
+	void DropAt(const FVector& GroundLocation, float Yaw, float Amount);
+
 protected:
+	virtual void BeginPlay() override;
+
 	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TObjectPtr<UStaticMeshComponent> Mesh;
 
 	// Bidon jeneratöre ne kadar yakıt ekler (MaxFuel = 100 üzerinden)
@@ -36,6 +41,9 @@ protected:
 
 private:
 	bool bAvailable = true;
+	FTransform HomeTransform;
+	float DefaultFuelAmount = 40.f;
+	bool bDroppedCopy = false;
 	FTimerHandle RespawnTimer;
 	void SetAvailable(bool bNewAvailable);
 	void Respawn();

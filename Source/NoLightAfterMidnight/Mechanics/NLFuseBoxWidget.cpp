@@ -162,8 +162,8 @@ void UNLFuseBoxWidget::UpdateStatus()
 	FLinearColor C(0.9f, 0.9f, 0.9f);
 	if (B->IsPowerOk()) { S = TEXT("POWER ON"); C = FLinearColor(0.35f, 1.f, 0.4f); }
 	else if (B->IsOn()) { S = TEXT("Switch is ON - don't touch the fuses!"); C = FLinearColor(1.f, 0.4f, 0.3f); }
-	else if (!B->AreFusesCorrect()) { S = TEXT("Switch OFF - safe to move the fuses"); C = FLinearColor(1.f, 0.82f, 0.35f); }
-	else { S = TEXT("Fuses in place - pull the lever up"); C = FLinearColor(0.6f, 0.9f, 1.f); }
+	// Doğru sıra burada yazmaz: güvenlik masasındaki monitörde (POWER DIAGNOSTICS) görünür
+	else { S = TEXT("Switch OFF - safe to move the fuses. The wiring order is on the security monitor."); C = FLinearColor(1.f, 0.82f, 0.35f); }
 	StatusText->SetText(FText::FromString(S));
 	StatusText->SetColorAndOpacity(FSlateColor(C));
 }

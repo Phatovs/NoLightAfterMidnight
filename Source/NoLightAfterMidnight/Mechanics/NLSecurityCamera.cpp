@@ -69,6 +69,15 @@ void ANLSecurityCamera::ApplyCCTVLook()
 	PP.ColorContrast = FVector4(1.f, 1.f, 1.f, CCTVContrast);
 	PP.bOverride_ColorGain = true;
 	PP.ColorGain = FVector4(CCTVTint.R, CCTVTint.G, CCTVTint.B, 1.f);
+	// Gece görüşü kendi pozlamasını yapar: dünyadaki karanlık/sabit pozlama ayarı kamera görüntüsünü karartmasın
+	PP.bOverride_AutoExposureMethod = true;
+	PP.AutoExposureMethod = EAutoExposureMethod::AEM_Histogram;
+	PP.bOverride_AutoExposureMinBrightness = true;
+	PP.AutoExposureMinBrightness = -10.f;
+	PP.bOverride_AutoExposureMaxBrightness = true;
+	PP.AutoExposureMaxBrightness = 20.f;
+	PP.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
+	PP.AutoExposureApplyPhysicalCameraExposure = false;
 	PP.bOverride_AutoExposureBias = true;
 	PP.AutoExposureBias = CCTVExposureBias;
 	PP.bOverride_FilmGrainIntensity = true;

@@ -18,6 +18,7 @@ enum class ENLDrownedState : uint8
 {
 	Inactive,   // Gün aktif değil
 	Waiting,    // Bir sonraki kamerada belirmeyi bekliyor
+	Arriving,   // Kameranın önüne koşarak geliyor (hat üzerinde)
 	Watching,   // Bir kamerada duruyor, oyuncunun ışık tutması bekleniyor
 	Flinching,  // Işık yedi: elini yüzüne kapatıyor / kaçıyor
 	Away,       // 3 kaçıştan sonra haritadan ayrıldı (2 dk)

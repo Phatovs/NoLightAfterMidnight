@@ -48,6 +48,14 @@ ANLSecurityDesk::ANLSecurityDesk()
 	ChairSeat->SetRelativeLocation(FVector(-76.f, 0.f, SeatHeight - 4.f));
 	ChairSeat->SetRelativeScale3D(FVector(0.46f, 0.46f, 0.08f));
 	ChairSeat->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	// Ahşap sandalye modeli varsa (Scripts/nl_env_kit.py): oturak bileşeni bütün sandalye olur, ayrı sırt gizlenir
+	static ConstructorHelpers::FObjectFinderOptional<UStaticMesh> ChairFinder(TEXT("/Game/Environment/Kit/SM_NL_Chair.SM_NL_Chair"));
+	const bool bChairModel = ChairFinder.Get() != nullptr;
+	if (bChairModel)
+	{
+		ChairSeat->SetStaticMesh(ChairFinder.Get());
+		ChairSeat->SetRelativeScale3D(FVector::OneVector);
+	}
 
 	ChairBack = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ChairBack"));
 	ChairBack->SetupAttachment(Root);
@@ -55,6 +63,7 @@ ANLSecurityDesk::ANLSecurityDesk()
 	ChairBack->SetRelativeLocation(FVector(-101.f, 0.f, SeatHeight + 28.f));
 	ChairBack->SetRelativeScale3D(FVector(0.06f, 0.46f, 0.5f));
 	ChairBack->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	if (bChairModel) ChairBack->SetStaticMesh(nullptr);
 
 	MonitorAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("MonitorAudio"));
 	MonitorAudio->SetupAttachment(MonitorMesh);

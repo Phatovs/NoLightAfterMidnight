@@ -45,6 +45,8 @@ public:
 
 	// Yuvadaki sigortanın rengi (sigorta numarası = doğru yuvası)
 	int32 GetFuseInSlot(int32 Slot) const { return SlotFuse.IsValidIndex(Slot) ? SlotFuse[Slot] : Slot; }
+	// Yuvanın istediği sigorta rengi (kablolama). Kutuda yazmaz; sadece güvenlik masasındaki monitörde görünür.
+	int32 GetTargetFuse(int32 Slot) const { return SlotTarget.IsValidIndex(Slot) ? SlotTarget[Slot] : Slot; }
 	static FLinearColor GetFuseColor(int32 Fuse);
 	static FText GetFuseColorName(int32 Fuse);
 
@@ -110,6 +112,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "NL|Fuse", meta = (ClampMin = "5")) float MaxTripInterval = 240.f;
 	// Sabotajcının şalteri indirme olasılığı (yoksa açık bırakır: dokunan çarpılır)
 	UPROPERTY(EditAnywhere, Category = "NL|Fuse", meta = (ClampMin = "0", ClampMax = "1")) float SabotageSwitchOffChance = 0.5f;
+	// Her sabotajda doğru dizilim (kablolama) değişir; yeni sıra sadece masadaki monitörde yazar
+	UPROPERTY(EditAnywhere, Category = "NL|Fuse") bool bRandomizeWiring = true;
+	// Sigortalar yanlışken şalter kaldırılırsa kol bu kadar sn sonra kıvılcımla geri düşer
+	UPROPERTY(EditAnywhere, Category = "NL|Fuse") float WrongWiringKickback = 0.35f;
 
 	// Şalter kolu: kutunun ön yüzündeki mafsaldan dışarı çıkar. Açıkken yukarı, kapalıyken aşağı bakar.
 	// LeverPivot ve LeverOutward kutunun (BoxMesh) kendi koordinatlarında.
@@ -133,6 +139,8 @@ private:
 	float LeverAngle = 0.f;
 	float TripTimer = 0.f;
 	TArray<int32> SlotFuse;
+	TArray<int32> SlotTarget;
+	FTimerHandle KickbackTimer;
 	int32 DraggedSlot = INDEX_NONE;
 	int32 HoveredSlot = INDEX_NONE;
 	bool bLeverDragging = false;

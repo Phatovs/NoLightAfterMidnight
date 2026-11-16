@@ -82,6 +82,9 @@ public:
 	bool HasFuelCan() const { return bHasFuelCan; }
 	// CanTop: bidonun dünyadaki tutma noktası (oyuncu eğilip oradan alır)
 	void PickupFuelCan(float Amount, const FVector& CanTop);
+	void SetCanSource(class ANLFuelCan* Can);
+	// G: elindeki bidonu önüne yere bırak
+	void DropFuelCan();
 	float ConsumeFuelCan();
 
 	// --- Ölüm ---
@@ -130,6 +133,43 @@ public:
 	UFUNCTION(Exec) void NLDebugDoor(int32 Win);
 	// Test: stamina göstergesi (yüzde 75, 35, tükenmiş) ekran görüntüleri
 	UFUNCTION(Exec) void NLDebugStamina();
+	// Test: Saved/tour.txt içindeki her satır "x y z pitch yaw isim" için uçarak o noktaya gidip ekran görüntüsü alır, sonra çıkar
+	UFUNCTION(Exec) void NLDebugTour();
+	// Test: başlangıç, masaya oturup 8 kamerayı sırayla gösterme, jeneratör (ekran görüntüleri)
+	UFUNCTION(Exec) void NLDebugAda();
+	// Test: oyuncu (X,Y) noktasında beklerken Runner kovalar; mesafe ve yol loglanır
+	UFUNCTION(Exec) void NLDebugChase(float X, float Y);
+	// Test: kulübe pusu alanına gir (kesin pusu), çığlık, Runner yaklaşınca kulübeye kapan ve kapıyı tut
+	UFUNCTION(Exec) void NLDebugAmbush();
+	// Test: oyuncu dışarıda kameranın yanında; Drowned koşarak gelir, el feneriyle kovalanır, hattan geri koşup kaybolur
+	UFUNCTION(Exec) void NLDebugDrowned(int32 CamIndex);
+	// Test: her kamera için koşarak gelme hattı bulunuyor mu (loglar)
+	UFUNCTION(Exec) void NLDebugDrownedRoutes();
+	// Test: bidonu al, jeneratör binasının benzin ağzına dök, arıza + tamir
+	UFUNCTION(Exec) void NLDebugRefuel();
+	// Test: oyuncu dışarıdayken Drowned gelip gider, kaçırmalar sayılmaz (oyuncu ölmemeli)
+	UFUNCTION(Exec) void NLDebugDrownedAway();
+	UFUNCTION(Exec) void NLDebugChaos();
+	UFUNCTION(Exec) void NLDebugDiag();
+	// Test: ses atmosferi (içeride/dışarıda, uzaktan sesler loglanır)
+	UFUNCTION(Exec) void NLDebugAmbience();
+	// Test: yağmur (dışarı/şimşek/içeri/2. gece dinmesi) ekran görüntüleri
+	UFUNCTION(Exec) void NLDebugRainShots();
+	// Test: açılış sinematiği boyunca ekran görüntüleri (oyunu -NLIntro ile başlat)
+	UFUNCTION(Exec) void NLDebugIntroShots();
+	// Test: Lvl_Ada_Art turu - noktalarda ekran görüntüsü + kare süresi (ms)
+	UFUNCTION(Exec) void NLDebugArtTour();
+	// Test: deniz feneri, içi, kontrol odası tozu, rıhtımdan huzme ve yol fenerleri
+	UFUNCTION(Exec) void NLDebugLighthouseTour();
+	// Test: benzin bidonunu al, yavaşlamayı logla, G ile bırak, tekrar al
+	UFUNCTION(Exec) void NLDebugDropCan();
+	// Test: duraklatma menüsünü aç, görüntü al, kapat
+	UFUNCTION(Exec) void NLDebugPauseMenu();
+
+	// Sinematik (açılış): arayüz gizli, oyuncu kontrolü kapalı
+	void SetCinematicMode(bool bOn);
+	void RestoreGameInput();
+	bool IsInCinematic() const { return bCinematic; }
 	ANLSecurityDesk* GetCurrentDesk() const { return CurrentDesk.Get(); }
 	ANLGenerator* GetCurrentGenerator() const { return CurrentGenerator.Get(); }
 	UNLFlashlightComponent* GetFlashlight() const { return Flashlight; }
@@ -173,6 +213,12 @@ protected:
 
 	// Shift ile koşma (Runner 250 cm/sn)
 	UPROPERTY(EditAnywhere, Category = "NL|Sprint") float SprintSpeed = 480.f;
+	// Benzin bidonu taşırken yürüme ve koşma hızı çarpanı
+	UPROPERTY(EditAnywhere, Category = "NL|Player") float CarryCanSpeedMultiplier = 0.82f;
+
+	// Kapı tutarken: bakış kolun ne kadar üstüne (cm; küçüldükçe daha aşağı bakar) ve gövdenin kapıya doğru eğilmesi (derece)
+	UPROPERTY(EditAnywhere, Category = "NL|Door") float HoldLookAboveGrip = 35.f;
+	UPROPERTY(EditAnywhere, Category = "NL|Door") float HoldLean = 8.f;
 	// Tam stamina ile kaç saniye koşulabilir
 	UPROPERTY(EditAnywhere, Category = "NL|Sprint") float SprintDuration = 5.5f;
 	// Boştan doluya dolma süresi (sn) ve koşmayı bıraktıktan sonra dolmaya başlama gecikmesi
@@ -216,6 +262,10 @@ private:
 	TWeakObjectPtr<ANLGenerator> CurrentGenerator;
 	TWeakObjectPtr<AActor> FocusedActor;
 	bool bHasFuelCan = false;
+	bool bDroppingCan = false;
+	bool bDropDone = false;
+	FVector DropSpot = FVector::ZeroVector;
+	TWeakObjectPtr<class ANLFuelCan> CanSource;
 	float CarriedFuel = 0.f;
 	float FootstepTimer = 0.f;
 
@@ -258,6 +308,7 @@ private:
 	bool bDepleted = false;
 	float StaminaRegenTimer = 0.f;
 	float PantingVolume = 0.f;
+	bool bHoldGripRight = false;
 	float ExhaustAlpha = 0.f;
 	float ExhaustPhase = 0.f;
 	bool bWasExhausted = false;
@@ -294,6 +345,9 @@ private:
 	void DebugThirdPerson(bool bEnable, const FVector& Offset = FVector(200.f, 70.f, 0.f));
 
 	UPROPERTY(Transient) TObjectPtr<UNLHUDWidget> HUDWidget;
+	bool bCinematic = false;
+	uint64 TourFrame0 = 0;
+	double TourTime0 = 0.0;
 
 	// Çalışma anında oluşturulan input asset'leri
 	UPROPERTY(Transient) TObjectPtr<UInputMappingContext> MappingContext;
@@ -307,6 +361,16 @@ private:
 	UPROPERTY(Transient) TArray<TObjectPtr<UInputAction>> CameraSelectActions;
 	// Sunum kısayolu (geliştirme sürümü): F9 -> bu gün 5 sn sonra biter
 	UPROPERTY(Transient) TObjectPtr<UInputAction> DebugEndDayAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> DropAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> PauseAction;
+	UPROPERTY(Transient) TObjectPtr<class UNLPauseMenuWidget> PauseMenu;
+	void OnPause(const struct FInputActionValue& Value) { TogglePause(); }
+public:
+	// ESC / P: duraklatma menüsü
+	void TogglePause();
+	bool IsPaused() const { return PauseMenu != nullptr; }
+protected:
+	void OnDrop(const struct FInputActionValue& Value) { DropFuelCan(); }
 
 	void BuildInput();
 	UInputAction* MakeAction(const TCHAR* Name, bool bAxis2D);

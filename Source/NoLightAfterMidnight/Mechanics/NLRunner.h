@@ -32,6 +32,8 @@ public:
 
 	// Tamir hatası: Runner uzakta (görünmeyen bir yerde) belirir, uzaktan çığlık atar ve oyuncu tamirden çıkınca koşmaya başlar
 	void PrepareChase(ANLPlayerCharacter* Target);
+	// Pusu (rastgele olay): uzakta belirir, çığlık atar (oyuncunun her yerden duyacağı şekilde), Delay saniye sonra kovalamaya başlar
+	void PrepareAmbush(ANLPlayerCharacter* Target, float Delay, float MinDistance, float MaxDistance);
 	// Hemen kovala (From: başlangıç noktası)
 	void StartChase(ANLPlayerCharacter* Target, const FTransform& From);
 	void StopChase();
@@ -88,6 +90,8 @@ private:
 	bool bDoorAssault = false;
 	FTransform PendingSpawn;
 	FTransform FindSpawnPoint(const ANLPlayerCharacter* Target) const;
+	FTransform FindSpawnPoint(const ANLPlayerCharacter* Target, float MinDistance, float MaxDistance) const;
+	float PendingDelay = 0.f;   // pusu: çığlıktan sonra koşmaya başlamadan önceki bekleme
 	float ChaseTimer = 0.f;
 	float RepathTimer = 0.f;
 	FTransform HomeTransform;

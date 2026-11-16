@@ -151,6 +151,24 @@ private:
 	void BuildStaminaGauge(UCanvasPanel* Root);
 	void TickStaminaGauge(float InDeltaTime, const class ANLPlayerCharacter* Player);
 
+	// Güç teşhisi (NLHUDDiag.cpp): arıza türü ve sigorta sırası sadece masadaki monitörde
+	UPROPERTY(Transient) TObjectPtr<UCanvasPanel> DiagPanel;
+	UPROPERTY(Transient) TObjectPtr<UTextBlock> DiagGenText;
+	UPROPERTY(Transient) TObjectPtr<UTextBlock> DiagFuelText;
+	UPROPERTY(Transient) TObjectPtr<UTextBlock> DiagFuseText;
+	UPROPERTY(Transient) TArray<TObjectPtr<UImage>> DiagSwatches;
+	UPROPERTY(Transient) TArray<TObjectPtr<UTextBlock>> DiagSlotTexts;
+	float DiagWidth = 330.f;
+	void BuildDiagPanel(UCanvasPanel* Root);
+
+	// İlk gece: "Get to the lighthouse" hedefi (fenere varınca kaybolur)
+	UPROPERTY(Transient) TObjectPtr<UTextBlock> ObjectiveText;
+	float ObjectiveAlpha = 0.f;
+	bool bObjectiveDone = false;
+	void BuildObjective(UCanvasPanel* Root);
+	void TickObjective(float InDeltaTime, const class ANLPlayerCharacter* Player, const class ANLGameMode* GM);
+	void TickDiagPanel(float InDeltaTime, bool bAtMonitor, const class UNLPowerSubsystem* Power);
+
 	void BuildDefaultLayout();
 	void BuildCameraLayout(UCanvasPanel* Root);
 	void TickCameraOverlay(const FGeometry& MyGeometry, float InDeltaTime, const class ANLSecurityDesk* Desk, const class ANLGenerator* Generator);

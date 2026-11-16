@@ -41,6 +41,13 @@ void ANLGenerator::BeginPlay()
 	{
 		HumAudio->SetSound(HumLoopSound);
 	}
+	// Motor uğultusu jeneratörün yakınında duyulur (her yerden değil): susması da bir işaret
+	HumAudio->bOverrideAttenuation = true;
+	HumAudio->AttenuationOverrides.bAttenuate = true;
+	HumAudio->AttenuationOverrides.bSpatialize = true;
+	HumAudio->AttenuationOverrides.AttenuationShape = EAttenuationShape::Sphere;
+	HumAudio->AttenuationOverrides.AttenuationShapeExtents = FVector(500.f, 0.f, 0.f);
+	HumAudio->AttenuationOverrides.FalloffDistance = HumHearDistance;
 
 	if (UNLPowerSubsystem* Power = GetWorld()->GetSubsystem<UNLPowerSubsystem>())
 	{
@@ -151,6 +158,9 @@ void ANLGenerator::Interact(ANLPlayerCharacter* Player)
 
 FVector ANLGenerator::GetPourPoint(const FVector& From) const
 {
+	// Elle verilmiş benzin ağzı (ör. jeneratör binasının duvarındaki depo kapağı)
+	if (!FuelInletOffset.IsNearlyZero()) return GetActorTransform().TransformPosition(FuelInletOffset);
+
 	// Jeneratörün üstünde, oyuncuya bakan kenarın biraz içinde; bidon kulpu bu yüksekliğe kalkar
 	const FBox Box = GetComponentsBoundingBox();
 	FVector P = Box.GetCenter();
@@ -182,6 +192,14 @@ void ANLGenerator::AddFuel(float Amount)
 	Fuel = FMath::Clamp(Fuel + Amount, 0.f, MaxFuel);
 }
 
+// Arıza/duruş sesleri adanın her yerinden, jeneratör binası yönünden duyulur
+static void NLGenFarEvent(ANLGenerator* Gen, USoundBase* Sound)
+{
+	if (UNLPowerSubsystem* Power = Gen->GetWorld()->GetSubsystem<UNLPowerSubsystem>()) Power->PlayFarEvent(Sound, Gen->GetActorLocation());
+	else UGameplayStatics::PlaySoundAtLocation(Gen, Sound, Gen->GetActorLocation());
+}
+#define FarEvent(S) NLGenFarEvent(this, S)
+
 void ANLGenerator::BreakDown()
 {
 	if (bBroken) return;
@@ -189,7 +207,7 @@ void ANLGenerator::BreakDown()
 	bBroken = true;
 	if (UNLPowerSubsystem* Power = GetWorld()->GetSubsystem<UNLPowerSubsystem>()) Power->MarkFailureActive();
 	UE_LOG(LogTemp, Log, TEXT("NLGenerator: broke down (game time %.0f s)"), GetWorld()->GetTimeSeconds());
-	UGameplayStatics::PlaySoundAtLocation(this, BreakdownSound, GetActorLocation());
+	FarEvent(BreakdownSound);
 	OnBrokeDown.Broadcast();
 	NotifyPowerChanged(true);
 }
@@ -274,14 +292,14 @@ void ANLGenerator::NotifyPowerChanged(bool bPlayTransitionSounds)
 	{
 		if (!HumAudio->IsPlaying())
 		{
-			if (bPlayTransitionSounds) UGameplayStatics::PlaySoundAtLocation(this, EngineStartSound, GetActorLocation());
+			if (bPlayTransitionSounds) FarEvent(EngineStartSound);
 			HumAudio->Play();
 		}
 	}
 	else if (HumAudio->IsPlaying())
 	{
 		HumAudio->Stop();
-		if (bPlayTransitionSounds) UGameplayStatics::PlaySoundAtLocation(this, EngineStopSound, GetActorLocation());
+		if (bPlayTransitionSounds) FarEvent(EngineStopSound);
 	}
 
 	if (UNLPowerSubsystem* Power = GetWorld()->GetSubsystem<UNLPowerSubsystem>())

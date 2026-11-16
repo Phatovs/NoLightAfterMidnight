@@ -25,8 +25,17 @@ public:
 	ANLDrowned();
 	virtual void Tick(float DeltaSeconds) override;
 
-	// Kameranın spawn noktasında belirir
+	// Kameranın spawn noktasında belirir (ışınlanma; yol bulunamazsa yedek)
 	void AppearAt(const FTransform& SpawnTransform);
+
+	// Kameranın önüne koşarak gelir: her kameranın sabit hattı (noktanın ApproachDistance gerisinden, kameraya doğru). Yol yoksa ışınlanır.
+	void ApproachTo(const FTransform& SpawnTransform);
+	bool HasArrived() const { return bShown && !bRunning && bArrived; }
+	bool IsRunning() const { return bRunning; }
+	// Geldiği hattan geri koşar, hattın sonunda (ya da süre dolunca) kaybolur
+	void RunOffAndVanish();
+	// Işık tutan oyuncuya döner (el feneriyle kovalanınca)
+	void FaceTowards(const FVector& Location);
 
 	// Işık yedi: elini yüzüne kapatır. Süreyi döndürür.
 	float PlayCoverFace();
@@ -55,6 +64,11 @@ protected:
 	// Kaçarken oynayan koşu animasyonu (montaj yoksa). Arkasında duvar varsa mesafe kısalır.
 	UPROPERTY(EditAnywhere, Category = "NL|Animation") TObjectPtr<UAnimSequenceBase> FleeRunAnimation;
 	UPROPERTY(EditAnywhere, Category = "NL|Animation") float FleeRunPlayRate = 1.15f;
+	// Kameraya koşarak gelme: hattın uzunluğu (cm) ve koşu hızı (cm/sn). Kaçarken de aynı hızla geri koşar.
+	UPROPERTY(EditAnywhere, Category = "NL|Movement") float ApproachDistance = 1500.f;
+	UPROPERTY(EditAnywhere, Category = "NL|Movement") float RunSpeed = 380.f;
+	// Kaçarken en fazla bu kadar koşar, sonra kaybolur (sn)
+	UPROPERTY(EditAnywhere, Category = "NL|Movement") float RunOffMaxTime = 8.f;
 	// Jumpscare: yakaladıktan sonra yüzün kameraya ne kadar daha yaklaştığı (cm) ve bakışın sarsılma şiddeti (derece)
 	UPROPERTY(EditAnywhere, Category = "NL|Jumpscare") float JumpscareLunge = 16.f;
 	UPROPERTY(EditAnywhere, Category = "NL|Jumpscare") float JumpscareCameraShake = 1.6f;
@@ -85,6 +99,18 @@ protected:
 
 private:
 	bool bShown = false;
+	// Hat üzerinde koşma
+	bool bRunning = false;
+	bool bArrived = false;
+	bool bRunOff = false;
+	float RunTimer = 0.f;
+	TArray<FVector> RunPath;
+	int32 RunIndex = 0;
+	FRotator ArriveRotation = FRotator::ZeroRotator;
+	FVector RouteStart = FVector::ZeroVector;   // hattın başı (kaçarken buraya döner)
+	bool FindRoute(const FVector& From, const FVector& To, TArray<FVector>& OutPoints) const;
+	void StartRun(const TArray<FVector>& Points, bool bOff);
+	void UpdateRun(float DeltaSeconds);
 
 	// Kodla verilen pozlar (montaj atanmamışsa)
 	enum class EPose : uint8 { None, CoverFace, Flee, Jumpscare };

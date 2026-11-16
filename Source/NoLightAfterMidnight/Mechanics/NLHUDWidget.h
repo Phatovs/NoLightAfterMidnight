@@ -58,6 +58,7 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UProgressBar> RepairProgressBar;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UWidget> RepairZone;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UWidget> RepairNeedle;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> RepairLabel;
 
 	// --- Ekran ortası ---
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> CenterMessageText;
@@ -80,6 +81,18 @@ protected:
 	// Ekrandan aşağı kayan parlak bandın tur süresi (sn)
 	UPROPERTY(EditAnywhere, Category = "NL|CCTV") float RollBarPeriod = 7.f;
 
+	// --- Etkileşim işaretleri: nesnelerin üstünde yarı saydam yuvarlak; bakılan nesnede içinde E ---
+	// Yuvarlağın görünmeye başladığı mesafe (cm) ve bu mesafeden ne kadar önce tam görünür olduğu
+	UPROPERTY(EditAnywhere, Category = "NL|Interact") float MarkerShowDistance = 700.f;
+	UPROPERTY(EditAnywhere, Category = "NL|Interact") float MarkerFadeDistance = 150.f;
+	// Ekrandaki boyut (piksel): normal / bakılan
+	UPROPERTY(EditAnywhere, Category = "NL|Interact") float MarkerSize = 28.f;
+	UPROPERTY(EditAnywhere, Category = "NL|Interact") float MarkerFocusedSize = 44.f;
+	// Nesnenin üst yüzeyinden ne kadar yukarıda durur (cm)
+	UPROPERTY(EditAnywhere, Category = "NL|Interact") float MarkerHeightOffset = 22.f;
+	// Yuvarlağın iç rengi (yarı saydam)
+	UPROPERTY(EditAnywhere, Category = "NL|Interact") FLinearColor MarkerFill = FLinearColor(0.02f, 0.02f, 0.02f, 0.55f);
+
 	UFUNCTION() void HandleDayStarted(int32 Day);
 	UFUNCTION() void HandleDayEnded(int32 Day);
 	UFUNCTION() void HandleGameOverScreen(ENLGameOverReason Reason);
@@ -98,6 +111,63 @@ private:
 	UPROPERTY(Transient) TArray<TObjectPtr<UImage>> BatterySegments;
 	UPROPERTY(Transient) TArray<TObjectPtr<UImage>> ReticleParts;
 	UPROPERTY(Transient) TArray<TObjectPtr<UTexture2D>> GeneratedTextures;
+
+	// Etkileşim işaretleri (widget'lar WidgetTree'de yaşar)
+	struct FInteractMarker
+	{
+		TWeakObjectPtr<AActor> Target;
+		TWeakObjectPtr<UImage> Circle;
+		TWeakObjectPtr<UTextBlock> Key;
+		TWeakObjectPtr<UTextBlock> Label;
+		float Alpha = 0.f;
+		float Focus = 0.f;
+	};
+	TArray<FInteractMarker> Markers;
+	UPROPERTY(Transient) TObjectPtr<UCanvasPanel> MarkerCanvas;
+	UPROPERTY(Transient) TObjectPtr<UTexture2D> MarkerTexture;
+	// Elektrik çarpması: ekranı kaplayan titreyen mavi-beyaz parazit
+	UPROPERTY(Transient) TObjectPtr<UImage> ShockOverlay;
+	// Ekranın ortasındaki artı (bakılan etkileşimli nesnede büyür ve parlar)
+	UPROPERTY(Transient) TObjectPtr<UCanvasPanel> Crosshair;
+	UPROPERTY(Transient) TArray<TObjectPtr<UImage>> CrosshairParts;
+	float CrosshairFocus = 0.f;
+	float MarkerRefreshTimer = 0.f;
+	void RefreshMarkerTargets();
+	void TickInteractMarkers(float InDeltaTime, const class ANLPlayerCharacter* Player);
+
+	// Stamina (NLHUDStamina.cpp): alt ortada ince, yıpranmış bar (iki yandan ortaya doğru kapanır) + azaldıkça kararan ekran kenarları
+	UPROPERTY(Transient) TObjectPtr<UCanvasPanel> StaminaGauge;
+	UPROPERTY(Transient) TObjectPtr<UImage> StaminaFill;
+	UPROPERTY(Transient) TObjectPtr<UImage> StaminaTrack;
+	UPROPERTY(Transient) TObjectPtr<UImage> StaminaVignette;
+	float StaminaBarWidth = 340.f;
+	float StaminaGaugeAlpha = 0.f;
+	float StaminaHideTimer = 0.f;
+	float StaminaShown = 1.f;
+	float StaminaLow = 0.f;
+	float StaminaDepletedFx = 0.f;   // sıfırlanınca soluk gri (yavaş dolma)
+	float StaminaPulsePhase = 0.f;
+	float StaminaFlicker = 1.f;
+	void BuildStaminaGauge(UCanvasPanel* Root);
+	void TickStaminaGauge(float InDeltaTime, const class ANLPlayerCharacter* Player);
+
+	// Güç teşhisi (NLHUDDiag.cpp): arıza türü ve sigorta sırası sadece masadaki monitörde
+	UPROPERTY(Transient) TObjectPtr<UCanvasPanel> DiagPanel;
+	UPROPERTY(Transient) TObjectPtr<UTextBlock> DiagGenText;
+	UPROPERTY(Transient) TObjectPtr<UTextBlock> DiagFuelText;
+	UPROPERTY(Transient) TObjectPtr<UTextBlock> DiagFuseText;
+	UPROPERTY(Transient) TArray<TObjectPtr<UImage>> DiagSwatches;
+	UPROPERTY(Transient) TArray<TObjectPtr<UTextBlock>> DiagSlotTexts;
+	float DiagWidth = 330.f;
+	void BuildDiagPanel(UCanvasPanel* Root);
+
+	// İlk gece: "Get to the lighthouse" hedefi (fenere varınca kaybolur)
+	UPROPERTY(Transient) TObjectPtr<UTextBlock> ObjectiveText;
+	float ObjectiveAlpha = 0.f;
+	bool bObjectiveDone = false;
+	void BuildObjective(UCanvasPanel* Root);
+	void TickObjective(float InDeltaTime, const class ANLPlayerCharacter* Player, const class ANLGameMode* GM);
+	void TickDiagPanel(float InDeltaTime, bool bAtMonitor, const class UNLPowerSubsystem* Power);
 
 	void BuildDefaultLayout();
 	void BuildCameraLayout(UCanvasPanel* Root);

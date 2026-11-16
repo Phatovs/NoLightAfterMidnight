@@ -8,6 +8,8 @@
 
 class ANLGenerator;
 class ANLFuseBox;
+class USoundBase;
+class USoundAttenuation;
 
 /**
  * Tek bir doğruluk kaynağı: "Adada elektrik var mı?"
@@ -45,9 +47,16 @@ public:
 	// Yeni arıza başlayabilir mi? Başlayamıyorsa kaç sn beklemesi gerektiğini OutWait'e yazar.
 	bool CanStartFailure(float& OutWait) const;
 
+	// Arıza sesleri ekranda yazı yerine: adanın her yerinden duyulur ve yönü bellidir (jeneratör binası / sigorta kulübesi).
+	// Uzaklaştıkça kısılır ama ~90 m'den bile duyulur.
+	void PlayFarEvent(USoundBase* Sound, const FVector& Location, float Volume = 1.f);
+
 private:
 	TWeakObjectPtr<ANLGenerator> Generator;
 	TWeakObjectPtr<ANLFuseBox> FuseBox;
 	bool bHasPower = false;
+	UPROPERTY(Transient) TObjectPtr<USoundAttenuation> FarAttenuation;
+	UPROPERTY(Transient) TObjectPtr<USoundBase> PowerDownSound;
+	UPROPERTY(Transient) TObjectPtr<USoundBase> PowerUpSound;
 	float LastFailureTime = -1000.f;
 };

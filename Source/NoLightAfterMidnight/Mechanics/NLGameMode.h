@@ -19,6 +19,7 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	UFUNCTION(BlueprintPure, Category = "NL|Game") int32 GetCurrentDay() const { return CurrentDay; }
+	UAudioComponent* GetAmbientAudio() const { return AmbientAudio; }
 	UFUNCTION(BlueprintPure, Category = "NL|Game") int32 GetTotalDays() const { return TotalDays; }
 	UFUNCTION(BlueprintPure, Category = "NL|Game") float GetDayTimeRemaining() const { return DayTimeRemaining; }
 	UFUNCTION(BlueprintPure, Category = "NL|Game") float GetDayProgress() const { return DayLengthSeconds > 0.f ? 1.f - DayTimeRemaining / DayLengthSeconds : 1.f; }
@@ -57,6 +58,17 @@ public:
 	UFUNCTION(Exec)
 	void NLDebugGeneratorIn(float Seconds);
 
+	// Test: "NLDebugRain 1" / "NLDebugRain 0" -> yağmuru aç/kapat (yavaşça)
+	UFUNCTION(Exec)
+	void NLDebugRain(int32 bOn);
+
+	// Test: "NLDebugLightning" -> hemen şimşek çakar, ardından gök gürler
+	UFUNCTION(Exec)
+	void NLDebugLightning();
+
+	// Açılış sinematiği bitti: 1. gün başlar ("DAY 1")
+	void FinishIntro();
+
 	UPROPERTY(BlueprintAssignable, Category = "NL|Game") FNLOnDayEvent OnDayStarted;
 	UPROPERTY(BlueprintAssignable, Category = "NL|Game") FNLOnDayEvent OnDayEnded;
 	// Ölüm anı (sistemler durur)
@@ -76,6 +88,16 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "NL|Game") float DayTransitionDuration = 5.f;
 	// Game over ekranından sonra seviye yeniden başlar
 	UPROPERTY(EditAnywhere, Category = "NL|Game") float RestartDelay = 6.f;
+	// Oyun başında NavMesh'i bir kez tam kur (Runner'ın yol bulması için). Level'de önceden kurulmuş NavMesh varsa kapatılabilir.
+	UPROPERTY(EditAnywhere, Category = "NL|Game") bool bBuildNavMeshOnStart = true;
+	// Level'de yoksa ses atmosferi yöneticisini (ANLAmbienceDirector) oluştur
+	UPROPERTY(EditAnywhere, Category = "NL|Audio") bool bSpawnAmbience = true;
+	// Level'de yoksa hava durumu yöneticisini (ANLWeatherDirector: yağmurlu geceler) oluştur
+	UPROPERTY(EditAnywhere, Category = "NL|Game") bool bSpawnWeather = true;
+	// Level'de ANLIntroDirector varsa oyun botla rıhtıma yanaşma sinematiğiyle açılır (ölüp yeniden başlayınca oynamaz)
+	UPROPERTY(EditAnywhere, Category = "NL|Game") bool bPlayIntro = true;
+	// Rıhtımdan deniz fenerine giden patikaya yanan fenerli direkler + tabela (NLGuideLanterns)
+	UPROPERTY(EditAnywhere, Category = "NL|Game") bool bGuideLanterns = true;
 
 	UPROPERTY(EditAnywhere, Category = "NL|Audio") TObjectPtr<USoundBase> DayStartSound;
 	UPROPERTY(EditAnywhere, Category = "NL|Audio") TObjectPtr<USoundBase> DayEndSound;
@@ -94,6 +116,7 @@ private:
 	UPROPERTY(Transient) TObjectPtr<class UAudioComponent> AmbientAudio;
 
 	void StartDay(int32 Day);
+	void BeginIntroOrDay();
 	void EndDay();
 	void ShowGameOverScreen(ENLGameOverReason Reason);
 	void RestartLevel();

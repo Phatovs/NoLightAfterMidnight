@@ -15,6 +15,9 @@ UNLFlashlightComponent::UNLFlashlightComponent()
 	SetInnerConeAngle(12.f);
 	SetOuterConeAngle(26.f);
 	SetLightColor(FLinearColor(1.f, 0.93f, 0.8f));
+	// Sisli gecede fenerin huzmesi görünsün (hacimli sis gerekir) ve nesneler gölge atsın
+	VolumetricScatteringIntensity = 2.5f;
+	SetCastShadows(true);
 }
 
 void UNLFlashlightComponent::BeginPlay()
@@ -28,9 +31,20 @@ void UNLFlashlightComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
+	// Açık havada mı: yarım saniyede bir yukarı ışın (tavan var mı)
+	OutdoorCheckTimer -= DeltaTime;
+	if (OutdoorCheckTimer <= 0.f && GetOwner())
+	{
+		OutdoorCheckTimer = 0.5f;
+		const FVector From = GetOwner()->GetActorLocation();
+		FHitResult Hit;
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(NLFlashlightRoof), false, GetOwner());
+		bOutdoors = !GetWorld()->LineTraceSingleByChannel(Hit, From, From + FVector(0.f, 0.f, RoofCheckHeight), ECC_Visibility, Q);
+	}
+
 	if (!bOn) return;
 
-	Battery = FMath::Max(0.f, Battery - DrainPerSecond * DeltaTime);
+	Battery = FMath::Max(0.f, Battery - DrainPerSecond * (bOutdoors ? OutdoorDrainMultiplier : 1.f) * DeltaTime);
 	if (Battery <= 0.f)
 	{
 		bOn = false;

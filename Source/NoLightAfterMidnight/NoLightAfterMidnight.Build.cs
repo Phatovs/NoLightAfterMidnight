@@ -24,7 +24,7 @@ public class NoLightAfterMidnight : ModuleRules
 			"AnimationCore"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		PrivateDependencyModuleNames.AddRange(new string[] { "ApplicationCore" });
 
 		PublicIncludePaths.AddRange(new string[] {
 			"NoLightAfterMidnight",

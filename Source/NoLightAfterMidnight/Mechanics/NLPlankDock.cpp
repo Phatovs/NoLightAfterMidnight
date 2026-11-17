@@ -23,7 +23,7 @@ ANLPlankDock::ANLPlankDock()
 	NL_KIT_MESH(Logs, "SM_NL_Log");
 	NL_KIT_MESH(Ropes, "SM_NL_RopeCoil");
 	NL_KIT_MESH(LanternPosts, "SM_NL_LanternPost");
-	NL_KIT_MESH(Lanterns, "SM_NL_Lantern");
+	NL_KIT_MESH(Lanterns, "SM_NL_GuideLantern");
 	Ropes->SetCullDistances(0, 5000);
 	Lanterns->SetCullDistances(0, 8000);
 

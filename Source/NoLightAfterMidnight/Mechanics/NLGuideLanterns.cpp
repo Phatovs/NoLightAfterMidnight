@@ -23,11 +23,13 @@ ANLGuideLanterns::ANLGuideLanterns()
 	Posts = MakeISM(this, Root, TEXT("Posts"), true);
 	Signs = MakeISM(this, Root, TEXT("Signs"), true);
 	for (UInstancedStaticMeshComponent* C : { Posts.Get(), Signs.Get() }) C->SetMobility(EComponentMobility::Movable);
-	NL_KIT_MESH(Posts, "SM_NL_LanternPost");
+	NL_KIT_MESH(Posts, "SM_NL_GuidePost");
 	NL_KIT_MESH(Signs, "SM_NL_Sign");
 	{
-		static ConstructorHelpers::FObjectFinderOptional<UStaticMesh> LanternFinder(TEXT("/Game/Environment/Kit/SM_NL_Lantern.SM_NL_Lantern"));
+		static ConstructorHelpers::FObjectFinderOptional<UStaticMesh> LanternFinder(TEXT("/Game/Environment/Kit/SM_NL_GuideLantern.SM_NL_GuideLantern"));
+		static ConstructorHelpers::FObjectFinderOptional<UStaticMesh> FlameFinder(TEXT("/Game/Environment/Kit/SM_NL_LanternFlame.SM_NL_LanternFlame"));
 		LanternMesh = LanternFinder.Get();
+		FlameMesh = FlameFinder.Get();
 	}
 
 	SignLabel = CreateDefaultSubobject<UTextRenderComponent>(TEXT("SignLabel"));
@@ -83,15 +85,6 @@ bool ANLGuideLanterns::FindRoadEdges(const FVector& P, const FVector& N, float& 
 	return true;
 }
 
-void ANLGuideLanterns::ScheduleFlicker(FNLGuideLamp& L, float Now, bool bFirst)
-{
-	// İlk titremeler fenerler arasında dağılsın, hepsi aynı anda yanıp sönmesin
-	const float Wait = FMath::FRandRange(FlickerInterval.X, FlickerInterval.Y) * (bFirst ? FMath::FRandRange(0.2f, 1.f) : 1.f);
-	L.NextFlicker = Now + Wait;
-	L.bBlackout = FMath::FRand() < BlackoutChance;
-	L.FlickerEnd = L.NextFlicker + (L.bBlackout ? FMath::FRandRange(2.f, 4.f) : FMath::FRandRange(0.4f, 1.3f));
-}
-
 void ANLGuideLanterns::Build(const FVector& Start, const FVector& Goal)
 {
 	UWorld* W = GetWorld();
@@ -128,7 +121,6 @@ void ANLGuideLanterns::Build(const FVector& Start, const FVector& Goal)
 		return W->OverlapAnyTestByChannel(Base + FVector(0, 0, 140.f), FQuat::Identity, ECC_Visibility, FCollisionShape::MakeCapsule(28.f, 100.f), Q);
 	};
 
-	const float Now = W->GetTimeSeconds();
 	int32 Count = 0, OnRoad = 0;
 	bool bSign = false;
 	float Walked = 0.f, Next = SkipStart;
@@ -161,7 +153,8 @@ void ANLGuideLanterns::Build(const FVector& Start, const FVector& Goal)
 			// Kol yola doğru uzanır
 			const FVector Arm = (RoadMid - Off) * Side < 0.f ? -N * Side : N * Side;
 			Posts->AddInstance(FTransform(Orient(Arm, FVector::UpVector), Base, FVector(1.f, 1.f, PostHeightScale)), true);
-			const FVector LanternAt = Base + Arm * 78.f + FVector(0, 0, 292.f * PostHeightScale);
+			// Fener kancası: kolun ucu (SM_NL_GuidePost: X 55, Z 220)
+			const FVector LanternAt = Base + Arm * 55.f + FVector(0, 0, 220.f * PostHeightScale);
 
 			FNLGuideLamp Lamp;
 			Lamp.Seed = FMath::FRandRange(0.f, 100.f);
@@ -176,11 +169,28 @@ void ANLGuideLanterns::Build(const FVector& Start, const FVector& Goal)
 				Lamp.Mesh->bVisibleInRayTracing = false;
 				Lamp.Mesh->RegisterComponent();
 				Lamp.Mesh->SetWorldTransform(FTransform(Orient(D, FVector::UpVector), LanternAt));
-				Lamp.Glass = Lamp.Mesh->CreateDynamicMaterialInstance(1);
+				const int32 GlassSlot = Lamp.Mesh->GetMaterialIndex(TEXT("MI_NL_LanternGlass"));
+				Lamp.Glass = Lamp.Mesh->CreateDynamicMaterialInstance(GlassSlot == INDEX_NONE ? 1 : GlassSlot);
 				if (Lamp.Glass) Lamp.Glass->SetScalarParameterValue(TEXT("Intensity"), GlassGlow);
+				// Mum alevi (fenerin içinde, fenerle birlikte sallanır)
+				if (FlameMesh)
+				{
+					Lamp.Flame = NewObject<UStaticMeshComponent>(this);
+					Lamp.Flame->SetupAttachment(Lamp.Mesh);
+					Lamp.Flame->SetMobility(EComponentMobility::Movable);
+					Lamp.Flame->SetStaticMesh(FlameMesh);
+					Lamp.Flame->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+					Lamp.Flame->SetCastShadow(false);
+					Lamp.Flame->bAffectDistanceFieldLighting = false;
+					Lamp.Flame->bAffectDynamicIndirectLighting = false;
+					Lamp.Flame->bVisibleInRayTracing = false;
+					Lamp.Flame->RegisterComponent();
+					Lamp.Flame->SetRelativeLocation(FVector(0.f, 0.f, -29.f));
+				}
 			}
 			Lamp.Light = NewObject<UPointLightComponent>(this);
-			Lamp.Light->SetupAttachment(Root);
+			// Işık fenerin içinde, fenerle birlikte sallanır
+			Lamp.Light->SetupAttachment(Lamp.Mesh ? static_cast<USceneComponent*>(Lamp.Mesh) : static_cast<USceneComponent*>(Root));
 			Lamp.Light->SetMobility(EComponentMobility::Movable);
 			Lamp.Light->SetIntensityUnits(ELightUnits::Candelas);
 			Lamp.Light->SetIntensity(LanternIntensity);
@@ -188,8 +198,7 @@ void ANLGuideLanterns::Build(const FVector& Start, const FVector& Goal)
 			Lamp.Light->SetLightColor(LampColor);
 			Lamp.Light->SetCastShadows(false);
 			Lamp.Light->RegisterComponent();
-			Lamp.Light->SetWorldLocation(LanternAt - FVector(0, 0, 26.f));
-			ScheduleFlicker(Lamp, Now, true);
+			Lamp.Light->SetWorldLocation(LanternAt - FVector(0, 0, 25.f));
 			Lamps.Add(Lamp);
 
 			if (!bSign)
@@ -219,34 +228,28 @@ void ANLGuideLanterns::Build(const FVector& Start, const FVector& Goal)
 void ANLGuideLanterns::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	const float Now = GetWorld()->GetTimeSeconds();
+	const float T = GetWorld()->GetTimeSeconds();
 	for (FNLGuideLamp& L : Lamps)
 	{
-		// Normalde çok hafif dalgalanır (eski ampul / gaz lambası)
-		float K = 0.92f + 0.08f * FMath::PerlinNoise1D(Now * 1.7f + L.Seed);
-		if (Now >= L.NextFlicker)
-		{
-			if (Now >= L.FlickerEnd)
-			{
-				ScheduleFlicker(L, Now, false);
-			}
-			else
-			{
-				const float T = Now - L.NextFlicker;
-				const float Dur = L.FlickerEnd - L.NextFlicker;
-				// Hızlı, düzensiz yanıp sönme
-				const float Buzz = FMath::PerlinNoise1D(T * 23.f + L.Seed * 3.f) * 0.5f + 0.5f;
-				float F = Buzz > 0.45f ? FMath::Lerp(0.55f, 1.f, Buzz) : 0.05f;
-				if (L.bBlackout)
-				{
-					// Önce cızırdar, sonra söner, sonunda yine cızırdayarak geri gelir
-					const bool bDark = T > 0.35f && T < Dur - 0.45f;
-					F = bDark ? 0.f : F;
-				}
-				K *= F;
-			}
-		}
+		// Mum gibi: birkaç hızda yumuşak dalgalanma, hiç sönmez
+		const float S = L.Seed;
+		const float Wave = 0.10f * FMath::PerlinNoise1D(T * 1.9f + S) + 0.06f * FMath::PerlinNoise1D(T * 5.3f + S * 1.7f) + 0.03f * FMath::PerlinNoise1D(T * 13.f + S * 2.3f);
+		const float K = 0.86f + Wave * FlickerStrength;
 		if (L.Light) L.Light->SetIntensity(LanternIntensity * K);
-		if (L.Glass) L.Glass->SetScalarParameterValue(TEXT("Intensity"), GlassGlow * FMath::Max(K, 0.04f));
+		if (L.Glass) L.Glass->SetScalarParameterValue(TEXT("Intensity"), GlassGlow * (0.9f + 1.4f * Wave * FlickerStrength));
+		// Alev boy atar ve hafifçe yana yatar
+		if (L.Flame)
+		{
+			const float H = 1.f + 0.16f * FMath::PerlinNoise1D(T * 6.f + S * 3.1f) + 0.06f * FMath::PerlinNoise1D(T * 15.f + S);
+			const float W = 1.f + 0.07f * FMath::PerlinNoise1D(T * 9.f + S * 0.7f);
+			L.Flame->SetRelativeScale3D(FVector(W, W, H));
+			L.Flame->SetRelativeRotation(FRotator(5.f * FMath::PerlinNoise1D(T * 3.f + S), 0.f, 5.f * FMath::PerlinNoise1D(T * 3.4f + S * 1.3f)));
+		}
+		// Fener rüzgârda kancasında hafifçe sallanır
+		if (L.Mesh)
+		{
+			const float Yaw = L.Mesh->GetComponentRotation().Yaw;
+			L.Mesh->SetWorldRotation(FRotator(2.5f * FMath::PerlinNoise1D(T * 0.7f + S), Yaw, 2.5f * FMath::PerlinNoise1D(T * 0.6f + S * 2.f)));
+		}
 	}
 }

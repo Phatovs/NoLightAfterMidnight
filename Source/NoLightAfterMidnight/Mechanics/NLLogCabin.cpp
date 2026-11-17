@@ -28,7 +28,7 @@ ANLLogCabin::ANLLogCabin()
 	NL_KIT_MESH(Deck, "SM_NL_DeckPanel");
 	NL_KIT_MESH(PaneLit, "SM_NL_Pane");
 	NL_KIT_MESH(PaneDark, "SM_NL_Pane");
-	NL_KIT_MESH(Lanterns, "SM_NL_Lantern");
+	NL_KIT_MESH(Lanterns, "SM_NL_GuideLantern");
 	NL_KIT_MESH(Pipes, "SM_NL_Stovepipe");
 	NL_KIT_MESH(Barrels, "SM_NL_Barrel");
 	NL_KIT_MESH(Crates, "SM_NL_Crate");

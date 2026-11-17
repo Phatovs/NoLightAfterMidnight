@@ -11,6 +11,7 @@ class UStaticMeshComponent;
 class UAudioComponent;
 class USoundBase;
 class UAnimMontage;
+class UMaterialInstanceDynamic;
 class ANLPlayerCharacter;
 
 UCLASS()
@@ -80,6 +81,12 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NL|Components")
 	TObjectPtr<UAudioComponent> HumAudio;
+
+	// Kontrol kutusundaki durum lambası (SM_NL_OldGenerator kontrol kutusu, yuva "MI_NL_GenLamp"): çalışırken yeşil, arızada kırmızı yanıp söner, yakıt yokken turuncu
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> LampMID;
+	// Lambanın etrafa vurduğu küçük renkli ışık (uzaktan da jeneratörün durumu anlaşılsın)
+	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TObjectPtr<class UPointLightComponent> LampLight;
+	void UpdateLamp();
 
 	// ---- Yakıt ----
 	UPROPERTY(EditAnywhere, Category = "NL|Fuel", meta = (ClampMin = "1"))

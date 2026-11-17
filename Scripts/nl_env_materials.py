@@ -357,6 +357,35 @@ instance("MI_NL_WindowGlow", glow, scalars={"Intensity": 0.22}, vectors={"Color"
 instance("MI_NL_WindowDark", glow, scalars={"Intensity": 0.0, "Roughness": 0.05}, vectors={"Base": (0.008, 0.01, 0.012)})
 instance("MI_NL_LanternGlass", glow, scalars={"Intensity": 0.5}, vectors={"Color": (1.0, 0.5, 0.18)})
 
+# Sigorta kutusu (Scripts/blender_fusebox.py)
+surf_mi("MI_NL_FuseCabinet", "Metal", 0.55, (0.3, 0.32, 0.31), uv=1.5)
+surf_mi("MI_NL_GaugeFace", "Plaster", 0.35, (1.3, 1.24, 1.08))
+surf_mi("MI_NL_Tape", "Plaster", 0.8, (1.15, 1.0, 0.78), uv=2.0)
+surf_mi("MI_NL_Ink", "Plaster", 0.6, (0.03, 0.03, 0.03))
+surf_mi("MI_NL_WarnPlate", "Metal", 0.5, (1.25, 0.95, 0.3), uv=2.0)
+surf_mi("MI_NL_Rubber", "Plaster", 0.55, (0.05, 0.05, 0.05))
+surf_mi("MI_NL_FuseCeramic", "Plaster", 0.3, (1.05, 1.03, 0.97), uv=3.0)
+instance("MI_NL_LedGreen", glow, scalars={"Intensity": 2.0}, vectors={"Color": (0.15, 1.0, 0.25)})
+
+# Jeneratör durum lambası (Scripts/blender_old_generator.py)
+instance("MI_NL_GenLamp", glow, scalars={"Intensity": 2.0}, vectors={"Color": (0.15, 1.0, 0.25)})
+
+# Eski jeneratör, balıkçı teknesi, bidon, fener alevi, mürettebat kıyafetleri
+surf_mi("MI_NL_OldGenPaint", "Metal", 0.55, (0.75, 1.5, 1.9), uv=1.2)
+surf_mi("MI_NL_TrawlerWhite", "Metal", 0.6, (2.5, 2.5, 2.4), uv=0.7)
+surf_mi("MI_NL_TrawlerBlue", "Metal", 0.55, (0.8, 1.6, 2.6), uv=0.7)
+surf_mi("MI_NL_TrawlerBottom", "Metal", 0.7, (0.6, 0.32, 0.18), uv=0.7)
+surf_mi("MI_NL_JerryGreen", "Metal", 0.45, (0.6, 0.78, 0.32), uv=2.0)
+instance("MI_NL_Flame", glow, scalars={"Intensity": 6.0}, vectors={"Color": (1.0, 0.55, 0.15)})
+# Kıyafetler manken (iskeletli mesh) üstünde kullanılır: ana malzeme iskeletli mesh desteği ister
+if not surf.get_editor_property("used_with_skeletal_mesh"):
+    surf.set_editor_property("used_with_skeletal_mesh", True)
+    mel.recompile_material(surf)
+    eal.save_loaded_asset(surf)
+    log("M_NL_Surface: iskeletli mesh destegi acildi")
+surf_mi("MI_NL_Raincoat", "Plaster", 0.3, (1.45, 1.1, 0.22), uv=2.0)
+surf_mi("MI_NL_DarkCoat", "Plaster", 0.7, (0.14, 0.15, 0.17), uv=2.0)
+
 with open(os.path.join(unreal.Paths.project_saved_dir(), "NLMaterials.log"), "w", encoding="utf-8") as f:
     f.write("\n".join(LOG))
 

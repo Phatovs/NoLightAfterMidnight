@@ -7,6 +7,9 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Components/PointLightComponent.h"
+#include "Engine/StaticMesh.h"
 
 ANLGenerator::ANLGenerator()
 {
@@ -24,6 +27,16 @@ ANLGenerator::ANLGenerator()
 
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	RootComponent = Mesh;
+	// Eski tip açık motorlu jeneratör (Scripts/blender_old_generator.py); levelde başka mesh verilmişse o kalır
+	static ConstructorHelpers::FObjectFinderOptional<UStaticMesh> GenFinder(TEXT("/Game/Environment/Kit/SM_NL_OldGenerator.SM_NL_OldGenerator"));
+	if (GenFinder.Get()) Mesh->SetStaticMesh(GenFinder.Get());
+	LampLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("LampLight"));
+	LampLight->SetupAttachment(Mesh);
+	LampLight->SetRelativeLocation(FVector(-50.f, -78.f, 82.f));
+	LampLight->SetIntensityUnits(ELightUnits::Candelas);
+	LampLight->SetIntensity(0.f);
+	LampLight->SetAttenuationRadius(170.f);
+	LampLight->SetCastShadows(false);
 
 	HumAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("HumAudio"));
 	HumAudio->SetupAttachment(Mesh);
@@ -33,6 +46,8 @@ ANLGenerator::ANLGenerator()
 void ANLGenerator::BeginPlay()
 {
 	Super::BeginPlay();
+	const int32 LampSlot = Mesh->GetMaterialIndex(TEXT("MI_NL_GenLamp"));
+	if (LampSlot != INDEX_NONE) LampMID = Mesh->CreateDynamicMaterialInstance(LampSlot);
 
 	Fuel = FMath::Clamp(StartFuel, 0.f, MaxFuel);
 	ScheduleNextBreakdown();
@@ -59,6 +74,7 @@ void ANLGenerator::BeginPlay()
 void ANLGenerator::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	UpdateLamp();
 
 	// Gün geçişinde / oyun bitince jeneratör donar
 	const ANLGameMode* GM = GetWorld()->GetAuthGameMode<ANLGameMode>();
@@ -305,5 +321,35 @@ void ANLGenerator::NotifyPowerChanged(bool bPlayTransitionSounds)
 	if (UNLPowerSubsystem* Power = GetWorld()->GetSubsystem<UNLPowerSubsystem>())
 	{
 		Power->RefreshPower();
+	}
+}
+
+void ANLGenerator::UpdateLamp()
+{
+	if (!LampMID && !LampLight) return;
+	const float T = GetWorld()->GetTimeSeconds();
+	FLinearColor Color(0.15f, 1.f, 0.25f);
+	float Intensity = 2.2f;
+	if (bBroken)
+	{
+		// Arıza: kırmızı, hızlı yanıp söner
+		Color = FLinearColor(1.f, 0.06f, 0.03f);
+		Intensity = FMath::Frac(T * 1.6f) < 0.5f ? 4.f : 0.05f;
+	}
+	else if (Fuel <= 0.f)
+	{
+		// Yakıt bitti: turuncu, yavaş nabız
+		Color = FLinearColor(1.f, 0.45f, 0.05f);
+		Intensity = 0.4f + 1.2f * (0.5f + 0.5f * FMath::Sin(T * 2.2f));
+	}
+	if (LampMID)
+	{
+		LampMID->SetVectorParameterValue(TEXT("Color"), Color);
+		LampMID->SetScalarParameterValue(TEXT("Intensity"), Intensity);
+	}
+	if (LampLight)
+	{
+		LampLight->SetLightColor(Color);
+		LampLight->SetIntensity(Intensity * 0.35f);
 	}
 }

@@ -1527,8 +1527,13 @@ void ANLPlayerCharacter::NLDebugFuseUI()
 	{
 		if (ANLFuseBox* F = Fuse())
 		{
-			const FVector C = F->GetComponentsBoundingBox().GetCenter();
-			SetActorLocation(FVector(C.X, C.Y + 150.f, GetActorLocation().Z), false, nullptr, ETeleportType::TeleportPhysics);
+			// Kutunun önünde (yerel +Y), zemine oturt, kabine bak
+			const FVector C = F->GetActorTransform().TransformPosition(FVector(0.f, 10.f, 34.f));
+			FVector P = F->GetActorTransform().TransformPosition(FVector(-20.f, 150.f, 0.f));
+			FHitResult Hit;
+			FCollisionQueryParams Q(SCENE_QUERY_STAT(NLFuseShot), false, this);
+			if (GetWorld()->LineTraceSingleByChannel(Hit, P, P - FVector(0, 0, 400.f), ECC_Visibility, Q)) P.Z = Hit.ImpactPoint.Z + GetCapsuleComponent()->GetScaledCapsuleHalfHeight() + 2.f;
+			SetActorLocation(P, false, nullptr, ETeleportType::TeleportPhysics);
 			if (Controller) Controller->SetControlRotation((C - FirstPersonCamera->GetComponentLocation()).Rotation());
 		}
 	});
@@ -2582,7 +2587,7 @@ void ANLPlayerCharacter::SetCinematicMode(bool bOn)
 void ANLPlayerCharacter::NLDebugIntroShots()
 {
 	FTimerManager& TM = GetWorldTimerManager();
-	const float Times[] = { 2.5f, 4.4f, 8.f, 10.5f, 13.f, 15.5f, 17.f, 19.2f, 20.6f, 21.6f, 23.f, 24.5f, 31.f };
+	const float Times[] = { 2.5f, 5.f, 8.f, 10.5f, 13.f, 15.5f, 17.f, 18.6f, 19.3f, 20.2f, 21.8f, 22.6f, 24.f, 26.f, 30.f, 36.f };
 	for (float T : Times)
 	{
 		FTimerHandle H;
@@ -2596,7 +2601,7 @@ void ANLPlayerCharacter::NLDebugIntroShots()
 	TM.SetTimer(Q, FTimerDelegate::CreateWeakLambda(this, [this]()
 	{
 		if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("quit"));
-	}), 33.f, false);
+	}), 38.f, false);
 }
 
 void ANLPlayerCharacter::NLDebugArtTour()
@@ -3045,4 +3050,45 @@ void ANLPlayerCharacter::NLDebugPerf()
 	}
 	FTimerHandle HQ;
 	TM.SetTimer(HQ, FTimerDelegate::CreateWeakLambda(this, [this]() { if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("quit")); }), 2.f + UE_ARRAY_COUNT(Stops) * Step + 1.f, false);
+}
+
+void ANLPlayerCharacter::NLDebugGenShots()
+{
+	ANLGenerator* G = nullptr;
+	for (TActorIterator<ANLGenerator> It(GetWorld()); It; ++It) { G = *It; break; }
+	if (!G) return;
+	FTimerManager& TM = GetWorldTimerManager();
+	auto At = [this, &TM](float Time, TFunction<void()> Fn)
+	{
+		FTimerHandle H;
+		TM.SetTimer(H, FTimerDelegate::CreateWeakLambda(this, [Fn]() { Fn(); }), Time, false);
+	};
+	auto View = [this, G](const FVector& LocalCam, const FVector& LocalLook)
+	{
+		APlayerController* PC = Cast<APlayerController>(GetController());
+		if (!PC) return;
+		if (!DebugCamera) DebugCamera = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform::Identity);
+		const FVector Cam = G->GetActorTransform().TransformPosition(LocalCam);
+		const FVector Look = G->GetActorTransform().TransformPosition(LocalLook);
+		DebugCamera->SetActorLocationAndRotation(Cam, (Look - Cam).Rotation());
+		PC->SetViewTarget(DebugCamera);
+		// Oyuncu kameranın yanında, fener açık ve jeneratöre doğru (ışık sahneyi aydınlatsın)
+		SetActorLocation(Cam + FVector(0, 0, -60.f), false, nullptr, ETeleportType::TeleportPhysics);
+		if (Controller) Controller->SetControlRotation((Look - Cam).Rotation());
+	};
+	auto Shot = [this](const TCHAR* Name) { UE_LOG(LogTemp, Log, TEXT("NLGenShots: %s"), Name); if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("shot")); };
+	At(0.5f, [this]() { if (!Flashlight->IsOn()) Flashlight->Toggle(); });
+	// Sadece bu test karesi için: modeli görmek adına geçici dolgu ışığı
+	At(0.9f, [this, G]() { UPointLightComponent* Fill = NewObject<UPointLightComponent>(G); Fill->SetupAttachment(G->GetRootComponent()); Fill->RegisterComponent(); Fill->SetRelativeLocation(FVector(250.f, -420.f, 320.f)); Fill->SetIntensityUnits(ELightUnits::Candelas); Fill->SetIntensity(60.f); Fill->SetAttenuationRadius(1400.f); Fill->SetCastShadows(false); Fill->ComponentTags.Add(TEXT("NLDebugFill")); });
+	At(1.0f, [View]() { View(FVector(380.f, -520.f, 190.f), FVector(0.f, 0.f, 110.f)); });
+	At(2.35f, [G]() { TInlineComponentArray<UPointLightComponent*> Ls(G); for (UPointLightComponent* L : Ls) if (L->ComponentHasTag(TEXT("NLDebugFill"))) L->DestroyComponent(); });
+	At(2.2f, [Shot]() { Shot(TEXT("generator 3/4 view")); });
+	At(2.5f, [View]() { View(FVector(-60.f, -330.f, 170.f), FVector(-80.f, -76.f, 125.f)); });
+	At(3.7f, [Shot]() { Shot(TEXT("control door + fuel inlet")); });
+	At(3.9f, [G]() { G->BreakDown(); });
+	At(4.6f, [Shot]() { Shot(TEXT("broken: red lamp")); });
+	At(4.85f, [Shot]() { Shot(TEXT("broken: red lamp (blink)")); });
+	At(5.2f, [View]() { View(FVector(560.f, 120.f, 200.f), FVector(150.f, 0.f, 110.f)); });
+	At(6.4f, [Shot]() { Shot(TEXT("radiator end")); });
+	At(7.0f, [this]() { if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("quit")); });
 }

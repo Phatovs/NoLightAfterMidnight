@@ -347,3 +347,25 @@ Fps sınırı olmadan ölçmek için: `-ExecCmds="t.MaxFPS 0,r.VSync 0,NLDebugPe
 - Hareketli küçük objeler (yağmur, el feneri, taşınan bidon, fener camı/hüzmeleri, toz, yol fenerleri) uzaklık alanı, Lumen ve ray tracing sahnesine girmez (`bAffectDistanceFieldLighting`, `bAffectDynamicIndirectLighting`, `bVisibleInRayTracing`). Yeni hareketli obje eklerken aynısını yap.
 - `DefaultEngine.ini` [SystemSettings]: `r.TranslucencyLightingVolumeDim=48`, `r.Lumen.ScreenProbeGather.TracingOctahedronResolution=6`.
 - Lumen yazılım izleme (`r.Lumen.HardwareRayTracing 0`) denendi, bu sahnede daha yavaş; donanımsal kalıyor.
+
+## Sigorta kutusu modeli
+
+Model Blender'da script ile üretilir: `Scripts/blender_fusebox.py` (Steam Blender 5.3).
+1. `blender.exe -b --factory-startup --python Scripts/blender_fusebox.py -- <proje>/Saved/NLFuse` (önizleme: `NL_FUSE_PREVIEW=1`, `Saved/NLFuse/preview.png`)
+2. Malzemeler: `Scripts/nl_env_materials.py` (MI_NL_FuseCabinet, MI_NL_GaugeFace, MI_NL_Tape, MI_NL_Ink, MI_NL_WarnPlate, MI_NL_Rubber, MI_NL_FuseCeramic, MI_NL_LedGreen)
+3. İçe aktarma: `Scripts/nl_import_fusebox.py` -> `/Game/Environment/Kit/SM_NL_FuseCabinet`, `SM_NL_FuseCartridge`, `SM_NL_FuseLever`, `SM_NL_GaugeNeedle`, `SM_NL_FuseLED`
+
+`ANLFuseBox::ApplyModel` modeli ve yerleşimi her açılışta uygular (leveldeki eski küp ayarlarını ezer). Yuvalar: 0-2 üst sıra dikey **CAM 1-3**, 3 yatay **FLASH**; monitördeki kablolama listesi de bu etiketleri kullanır. Ölçüleri değiştirirsen Blender script'indeki yerleşim ile `NLFuseLayout` (NLFuseBox.cpp) aynı kalmalı.
+Göstergeler ve yeşil LED'ler sadece genel elektrik durumunu gösterir (hangi sigortanın yanlış olduğunu söylemez).
+
+## Blender modelleri (tekne, jeneratör, bidon, yol feneri)
+
+Ortak yardımcılar `Scripts/blender_nl_common.py`. Hepsi `Saved/NLProps` klasörüne üretilir (önizleme için `NL_PREVIEW=1`):
+- `blender_trawler.py`: SM_NL_Trawler (balıkçı teknesi, +X pruva, güverte Z 80) + SM_NL_TrawlerWheel (dümen, X ekseninde döner)
+- `blender_old_generator.py`: SM_NL_OldGenerator (açık motorlu eski jeneratör, palet üstünde; kontrol kutusunda durum lambası MI_NL_GenLamp)
+- `blender_props.py`: SM_NL_JerryCan (yeşil 20 L), SM_NL_GuidePost (taş kaideli direk), SM_NL_GuideLantern (asılı fener), SM_NL_LanternFlame (mum alevi)
+
+Sonra `nl_env_materials.py` ve `nl_import_models.py` (içe aktarır, adadaki jeneratörü SM_NL_OldGenerator'a geçirir; `NL_MODELS=SM_NL_Trawler,...` ile sadece seçilenler).
+
+Açılış (NLIntroDirector): kaptan (sarı yağmurluk) köşkte iki eli dümende, dümen dönüşlere göre döner; yolcu (koyu mont) arka güvertede oyuncunun yanında, bir eli küpeştede. Oyuncu rıhtıma inince dönüp tekneye bakar, yolcu el sallar; sonra adaya döner (DAY 1) ve tekne motoru açıp denize çıkarak kaybolur (DepartDuration). Ölüm/devam ile başlarken tekne yoktur. Figürler: ANLSeatedFigure (bSeated=false ayakta, SetHandTargetsWorld, SetWave).
+Yol fenerleri (NLGuideLanterns): ışık mum gibi yumuşak dalgalanır, hiç sönmez (FlickerStrength); alev boy atar, fener rüzgârda hafifçe sallanır. Test: `NLDebugIntroShots` (`-NLIntro` ile), `NLDebugGuideShots`, `NLDebugGenShots`.

@@ -173,6 +173,8 @@ public:
 	UFUNCTION(Exec) void NLDebugStutter();
 	// Performans: tipik oyun noktalarında kare/oyun/çizim/GPU süresi + ProfileGPU dökümü
 	UFUNCTION(Exec) void NLDebugPerf();
+	// Jeneratör modeli: dışarıdan görünüm, benzin ağzı yakın plan, arıza (kırmızı lamba)
+	UFUNCTION(Exec) void NLDebugGenShots();
 
 	// Sinematik (açılış): arayüz gizli, oyuncu kontrolü kapalı
 	void SetCinematicMode(bool bOn);

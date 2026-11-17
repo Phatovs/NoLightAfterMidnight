@@ -11,3 +11,4 @@ Saved/
 *.opendb
 Build/
 *.bin
+__pycache__/

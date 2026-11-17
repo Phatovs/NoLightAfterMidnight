@@ -122,8 +122,7 @@ void UNLHUDWidget::TickDiagPanel(float InDeltaTime, bool bAtMonitor, const UNLPo
 		if (DiagSwatches[i]) DiagSwatches[i]->SetColorAndOpacity(ANLFuseBox::GetFuseColor(Want));
 		if (DiagSlotTexts.IsValidIndex(i) && DiagSlotTexts[i])
 		{
-			static const TCHAR* Pos[ANLFuseBox::NumFuses] = { TEXT("TL"), TEXT("TR"), TEXT("BL"), TEXT("BR") };
-			DiagSlotTexts[i]->SetText(FText::FromString(FString::Printf(TEXT("%s %s"), Pos[i], *ANLFuseBox::GetFuseColorName(Want).ToString())));
+			DiagSlotTexts[i]->SetText(FText::FromString(FString::Printf(TEXT("%s  %s"), *ANLFuseBox::GetSlotLabel(i), *ANLFuseBox::GetFuseColorName(Want).ToString())));
 		}
 	}
 }

@@ -332,7 +332,7 @@ if gen_src and gen_src.get_class() == unreal.StaticMeshActor.static_class():
     log("Jenerator: %s binasi NLGenerator oldu (ayri kutu kaldirildi)" % GEN_LABEL)
 gen.set_actor_label(GEN_LABEL)
 # Benzin ağzı: güney duvarında, kapının sağında, el hizasında (binanın yerel koordinatı)
-gen.set_editor_property("fuel_inlet_offset", V(150, -125, 110))
+gen.set_editor_property("fuel_inlet_offset", V(-92, -92, 112))
 
 
 # ------------------------------------------------------------------ 8 kamera (blockout'taki KAMERA_xx küreleri yerine)
@@ -474,7 +474,7 @@ if wall_a and wall_b and shack_floor:
     fuse_pos = door_mid + normal * back_depth + u * -5.0
     fuse_pos.z = floor_top + 100.0
     fuse = ensure_one(unreal.NLFuseBox, "NLFuseBox", fuse_pos, rot(0, fuse_yaw, 0))
-    set_mesh(comp(fuse, "LeverMesh"), CUBE, loc=V(50, 105, 50), scale=V(0.06, 0.06, 0.3))
+    # Kabin, kol ve sigortalar C++ (ANLFuseBox::ApplyModel) tarafindan SM_NL_FuseCabinet modelinden kurulur
     # Benzin bidonu: kapının yanında yerde, ön rafın hemen yanında (rafın altında kalmasın)
     can_pos = door_mid + normal * 130.0 + u * 55.0
     can_pos.z = floor_top + 25.0

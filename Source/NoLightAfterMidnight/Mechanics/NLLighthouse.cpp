@@ -39,7 +39,7 @@ ANLLighthouse::ANLLighthouse()
 	NL_KIT_MESH(Tower, "SM_NL_LH_Tower");
 	NL_KIT_MESH(Gallery, "SM_NL_LH_Gallery");
 	NL_KIT_MESH(LanternRoom, "SM_NL_LH_LanternRoom");
-	NL_KIT_MESH(InteriorLantern, "SM_NL_Lantern");
+	NL_KIT_MESH(InteriorLantern, "SM_NL_GuideLantern");
 
 	Boards = MakeISM(this, Root, TEXT("Boards"), true);
 	Windows = MakeISM(this, Root, TEXT("Windows"), false);

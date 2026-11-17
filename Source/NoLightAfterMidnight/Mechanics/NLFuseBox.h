@@ -20,7 +20,8 @@ class UAnimMontage;
  * Oyuncu E ile sigorta arayüzünü açar: şalteri kapatıp sigortaları doğru yuvalara taşır, sonra şalteri açar.
  * Şalter açıkken sigortaya dokunursa elektrik çarpar.
  *
- * Yuva sırası (karşıdan bakınca): 0 sol üst, 1 sağ üst, 2 sol alt, 3 sağ alt.
+ * Model: Scripts/blender_fusebox.py (SM_NL_FuseCabinet ve parçaları). Yuvalar: 0-2 üst sıra dikey (CAM 1-3), 3 ortada yatay (FLASH).
+ * Göstergeler ve yeşil LED'ler elektrik durumunu gösterir (hangi sigortanın yanlış olduğunu söylemez).
  */
 UCLASS()
 class NOLIGHTAFTERMIDNIGHT_API ANLFuseBox : public AActor, public INLInteractable
@@ -49,6 +50,8 @@ public:
 	int32 GetTargetFuse(int32 Slot) const { return SlotTarget.IsValidIndex(Slot) ? SlotTarget[Slot] : Slot; }
 	static FLinearColor GetFuseColor(int32 Fuse);
 	static FText GetFuseColorName(int32 Fuse);
+	// Yuvanın kutudaki etiketi (CAM 1, CAM 2, CAM 3, FLASH) - monitördeki kablolama listesi de bunu kullanır
+	static FString GetSlotLabel(int32 Slot);
 
 	UFUNCTION(BlueprintCallable, Category = "NL|Fuse") void SetOn(bool bNewOn);
 	// İki yuvadaki sigortaların yerini değiştirir (arayüz)
@@ -92,15 +95,19 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void OnConstruction(const FTransform& Transform) override;
 
 	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TObjectPtr<UStaticMeshComponent> BoxMesh;
 	// Şalter kolu, açık/kapalı açıları arasında döner
 	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TObjectPtr<UStaticMeshComponent> LeverMesh;
-	// Kutunun soluna uzanan sigorta paneli ve üstündeki 4 sigorta (gövde + iki metal başlık) ile renkli yuva plakaları
-	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TObjectPtr<UStaticMeshComponent> PanelMesh;
-	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TArray<TObjectPtr<UStaticMeshComponent>> SlotPlates;
+	// Kartuş sigortalar (seramik gövde + metal başlıklar + renkli bant)
 	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TArray<TObjectPtr<UStaticMeshComponent>> FuseBodies;
-	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TArray<TObjectPtr<UStaticMeshComponent>> FuseCaps;
+	// Gösterge ibreleri: 0-2 CAM, 3 FLASH, 4 ana gösterge
+	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TArray<TObjectPtr<UStaticMeshComponent>> Needles;
+	// Yeşil LED'ler: 0-2 CAM sigortalarının üstünde, 3 FLASH
+	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TArray<TObjectPtr<UStaticMeshComponent>> Leds;
+	UPROPERTY() TObjectPtr<UStaticMesh> CabinetAsset;
+	UPROPERTY() TObjectPtr<UStaticMesh> LeverAsset;
 	// E ile açılınca oyuncunun görüşü bu kameraya geçer (sigortalar ve şalter yakın planda)
 	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TObjectPtr<UCameraComponent> FuseViewCamera;
 	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TObjectPtr<UPointLightComponent> ViewLight;
@@ -119,11 +126,11 @@ protected:
 
 	// Şalter kolu: kutunun ön yüzündeki mafsaldan dışarı çıkar. Açıkken yukarı, kapalıyken aşağı bakar.
 	// LeverPivot ve LeverOutward kutunun (BoxMesh) kendi koordinatlarında.
-	UPROPERTY(EditAnywhere, Category = "NL|Fuse") FVector LeverPivot = FVector(50.f, 100.f, 50.f);
+	UPROPERTY(EditAnywhere, Category = "NL|Fuse") FVector LeverPivot = FVector(5.f, 7.f, 6.f);
 	UPROPERTY(EditAnywhere, Category = "NL|Fuse") FVector LeverOutward = FVector(0.f, 1.f, 0.f);
-	UPROPERTY(EditAnywhere, Category = "NL|Fuse") float LeverLength = 30.f;
-	UPROPERTY(EditAnywhere, Category = "NL|Fuse") float LeverOnAngle = 45.f;
-	UPROPERTY(EditAnywhere, Category = "NL|Fuse") float LeverOffAngle = -45.f;
+	UPROPERTY(EditAnywhere, Category = "NL|Fuse") float LeverLength = 14.f;
+	UPROPERTY(EditAnywhere, Category = "NL|Fuse") float LeverOnAngle = 55.f;
+	UPROPERTY(EditAnywhere, Category = "NL|Fuse") float LeverOffAngle = -55.f;
 	UPROPERTY(EditAnywhere, Category = "NL|Fuse") float LeverSpeed = 400.f;
 
 	UPROPERTY(EditAnywhere, Category = "NL|Audio") TObjectPtr<USoundBase> SwitchOnSound;
@@ -144,7 +151,12 @@ private:
 	int32 DraggedSlot = INDEX_NONE;
 	int32 HoveredSlot = INDEX_NONE;
 	bool bLeverDragging = false;
-	void PlaceFuseMeshes(int32 SlotIdx, const FVector& LocalPos, float Scale);
+	void PlaceFuseMeshes(int32 SlotIdx, const FVector& LocalPos, float Scale, bool bHorizontal);
+	// Model parçalarını ve yerleşimi uygular (leveldeki eski küp ayarlarını ezer)
+	void ApplyModel();
+	void TickGauges(float DeltaSeconds);
+	TArray<float> NeedleAngles;
+	UPROPERTY(Transient) TArray<TObjectPtr<UMaterialInstanceDynamic>> LedMIDs;
 	void ResetFuseMeshes();
 	bool RayToPanel(const FVector& Origin, const FVector& Dir, FVector& OutLocal) const;
 

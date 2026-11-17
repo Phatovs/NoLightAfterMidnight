@@ -723,7 +723,7 @@ def make_flashlight():
     save(m, "SM_NL_Flashlight", ["MI_NL_Metal", "MI_NL_LH_Glass"])
 
 
-for fn in (make_boat, make_outboard, make_oar, make_desk, make_crt, make_chair, make_jerrycan, make_flashlight):
+for fn in (make_boat, make_outboard, make_oar, make_desk, make_crt, make_chair, make_flashlight):  # bidon artık Scripts/blender_props.py
     if _only and fn.__name__ not in _only:
         continue
     try:

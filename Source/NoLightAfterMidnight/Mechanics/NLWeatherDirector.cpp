@@ -32,6 +32,10 @@ ANLWeatherDirector::ANLWeatherDirector()
 	Drops->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Drops->SetCanEverAffectNavigation(false);
 	Drops->CastShadow = false;
+	// Hareketli küçük obje: uzaklık alanı / Lumen sahnesine girmesin (her kare güncelleme maliyeti)
+	Drops->bAffectDistanceFieldLighting = false;
+	Drops->bAffectDynamicIndirectLighting = false;
+	Drops->bVisibleInRayTracing = false;
 	Drops->bReceivesDecals = false;
 	Drops->SetMobility(EComponentMobility::Movable);
 	Drops->SetVisibility(false);

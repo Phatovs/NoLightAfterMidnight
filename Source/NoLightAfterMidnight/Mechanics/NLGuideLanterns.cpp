@@ -173,6 +173,7 @@ void ANLGuideLanterns::Build(const FVector& Start, const FVector& Goal)
 				Lamp.Mesh->SetStaticMesh(LanternMesh);
 				Lamp.Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 				Lamp.Mesh->SetCastShadow(false);
+				Lamp.Mesh->bVisibleInRayTracing = false;
 				Lamp.Mesh->RegisterComponent();
 				Lamp.Mesh->SetWorldTransform(FTransform(Orient(D, FVector::UpVector), LanternAt));
 				Lamp.Glass = Lamp.Mesh->CreateDynamicMaterialInstance(1);

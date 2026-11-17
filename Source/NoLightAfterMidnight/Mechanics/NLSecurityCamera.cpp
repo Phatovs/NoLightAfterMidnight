@@ -7,6 +7,7 @@
 #include "Components/ArrowComponent.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Kismet/GameplayStatics.h"
+#include "Camera/PlayerCameraManager.h"
 
 ANLSecurityCamera::ANLSecurityCamera()
 {
@@ -29,6 +30,9 @@ ANLSecurityCamera::ANLSecurityCamera()
 	SceneCapture->bCaptureOnMovement = false;
 	SceneCapture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
 	SceneCapture->FOVAngle = 80.f;
+	// Gece görüşü görüntüsünde Lumen/DFAO farkı görünmez, kamerayı ucuzlatır
+	SceneCapture->ShowFlags.SetDistanceFieldAO(false);
+	SceneCapture->ShowFlags.SetVolumetricFog(false);
 
 	DefenseLight = CreateDefaultSubobject<USpotLightComponent>(TEXT("DefenseLight"));
 	DefenseLight->SetupAttachment(Root);
@@ -63,6 +67,11 @@ void ANLSecurityCamera::ApplyCCTVLook()
 	FPostProcessSettings& PP = SceneCapture->PostProcessSettings;
 	SceneCapture->PostProcessBlendWeight = 1.f;
 
+	// Gece görüşünde Lumen GI/yansıma farkı görünmüyor (karşılaştırıldı), kamera görüntüsü ucuz olsun
+	PP.bOverride_DynamicGlobalIlluminationMethod = true;
+	PP.DynamicGlobalIlluminationMethod = EDynamicGlobalIlluminationMethod::None;
+	PP.bOverride_ReflectionMethod = true;
+	PP.ReflectionMethod = EReflectionMethod::None;
 	PP.bOverride_ColorSaturation = true;
 	PP.ColorSaturation = FVector4(1.f, 1.f, 1.f, CCTVSaturation);
 	PP.bOverride_ColorContrast = true;
@@ -95,6 +104,7 @@ void ANLSecurityCamera::ApplyCCTVLook()
 void ANLSecurityCamera::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	TickFeed(DeltaSeconds);
 
 	if (CooldownRemaining > 0.f)
 	{
@@ -125,14 +135,45 @@ void ANLSecurityCamera::Tick(float DeltaSeconds)
 	}
 }
 
-void ANLSecurityCamera::SetFeedActive(bool bActive, UTextureRenderTarget2D* Target)
+void ANLSecurityCamera::SetFeedActive(bool bActive, UTextureRenderTarget2D* Target, UPrimitiveComponent* Screen)
 {
 	bFeedActive = bActive;
+	FeedScreen = Screen;
 	SceneCapture->TextureTarget = bActive ? Target : nullptr;
-	SceneCapture->bCaptureEveryFrame = bActive && PowerConsumer->IsPowered();
-
-	if (SceneCapture->bCaptureEveryFrame)
+	// Her karede değil: TickFeed sadece görüntü görünürken çizer
+	SceneCapture->bCaptureEveryFrame = false;
+	CaptureCooldown = 0.f;
+	if (bActive && PowerConsumer->IsPowered())
 	{
+		SceneCapture->CaptureScene();
+	}
+}
+
+void ANLSecurityCamera::TickFeed(float DeltaSeconds)
+{
+	if (!bFeedActive || !SceneCapture->TextureTarget || !PowerConsumer->IsPowered()) return;
+	float Dist = 0.f;
+	bool bSeen = true;
+	if (UPrimitiveComponent* Screen = FeedScreen.Get())
+	{
+		bSeen = Screen->WasRecentlyRendered(0.3f);
+		if (const APlayerCameraManager* PCM = UGameplayStatics::GetPlayerCameraManager(this, 0))
+		{
+			Dist = FVector::Dist(PCM->GetCameraLocation(), Screen->GetComponentLocation());
+		}
+	}
+	// Masada oturan oyuncu (ekran tam ekran görüntüyü de gösterir): her kare
+	if (Dist < 450.f)
+	{
+		SceneCapture->CaptureScene();
+		return;
+	}
+	// Odadan bakıyor: tüplü monitör gibi saniyede ~12 kare; görünmüyorsa hiç
+	if (!bSeen) return;
+	CaptureCooldown -= DeltaSeconds;
+	if (CaptureCooldown <= 0.f)
+	{
+		CaptureCooldown = 1.f / 12.f;
 		SceneCapture->CaptureScene();
 	}
 }
@@ -165,5 +206,5 @@ void ANLSecurityCamera::HandlePowerChanged(bool bHasPower)
 		FlashElapsed = -1.f;
 		DefenseLight->SetIntensity(0.f);
 	}
-	SceneCapture->bCaptureEveryFrame = bFeedActive && bHasPower;
+	if (bFeedActive && bHasPower) SceneCapture->CaptureScene();
 }

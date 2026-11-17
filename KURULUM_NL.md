@@ -337,3 +337,13 @@ Test: `NLDebugFuseIn 4` + `NLDebugGeneratorIn 6` → şalter atar, jeneratör ar
 - Oyuncunun üstünde çatı yoksa (açık hava) fener pili **2 kat** hızlı biter: dolu pil dışarıda ~100 sn, içeride ~200 sn ışık verir (NLFlashlightComponent > **Outdoor Drain Multiplier**, **Roof Check Height**).
 - Pil sadece kontrol odasındaki **şarj aletinde** ve elektrik varken dolar. Uzun süre dışarıda kalan karanlıkta kalır; Drowned'ı dışarıda el feneriyle kovalamak da pile bağlı.
 - Testte ölçülen: dışarıda 10 sn'de %10, içeride 10 sn'de %5.
+
+## Performans notları
+
+Ölçüm: `NLDebugPerf` (Lvl_Ada_Art, 5 tipik nokta; kare/oyun/çizim/GPU süresi ve ProfileGPU dökümü loga yazılır).
+Fps sınırı olmadan ölçmek için: `-ExecCmds="t.MaxFPS 0,r.VSync 0,NLDebugPerf"`.
+
+- Güvenlik kamerası (`ANLSecurityCamera::TickFeed`): sadece monitör ekranda görünürken çizer; masada her kare, odadan bakarken ~12 fps, görünmüyorsa hiç. Kamera görüntüsünde Lumen GI/yansıma ve DFAO kapalı (gece görüşünde fark yok).
+- Hareketli küçük objeler (yağmur, el feneri, taşınan bidon, fener camı/hüzmeleri, toz, yol fenerleri) uzaklık alanı, Lumen ve ray tracing sahnesine girmez (`bAffectDistanceFieldLighting`, `bAffectDynamicIndirectLighting`, `bVisibleInRayTracing`). Yeni hareketli obje eklerken aynısını yap.
+- `DefaultEngine.ini` [SystemSettings]: `r.TranslucencyLightingVolumeDim=48`, `r.Lumen.ScreenProbeGather.TracingOctahedronResolution=6`.
+- Lumen yazılım izleme (`r.Lumen.HardwareRayTracing 0`) denendi, bu sahnede daha yavaş; donanımsal kalıyor.

@@ -68,11 +68,19 @@ ANLLighthouse::ANLLighthouse()
 	{
 		B->SetupAttachment(Rotor);
 		B->SetCastShadow(false);
+		// Hareketli küçük obje: uzaklık alanı / Lumen sahnesine girmesin (her kare güncelleme maliyeti)
+		B->bAffectDistanceFieldLighting = false;
+		B->bAffectDynamicIndirectLighting = false;
+		B->bVisibleInRayTracing = false;
 		B->SetMobility(EComponentMobility::Movable);
 		NL_KIT_MESH(B, "SM_NL_LH_Beam");
 	}
 	Lens->SetMobility(EComponentMobility::Movable);
 	Lens->SetCastShadow(false);
+	// Hareketli küçük obje: uzaklık alanı / Lumen sahnesine girmesin (her kare güncelleme maliyeti)
+	Lens->bAffectDistanceFieldLighting = false;
+	Lens->bAffectDynamicIndirectLighting = false;
+	Lens->bVisibleInRayTracing = false;
 
 	auto Spot = [this](FName Name)
 	{

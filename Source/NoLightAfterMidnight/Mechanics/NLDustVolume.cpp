@@ -14,6 +14,10 @@ ANLDustVolume::ANLDustVolume()
 	Motes = NLEnv::MakeISM(this, Box, TEXT("Motes"), false);
 	NL_KIT_MESH(Motes, "SM_NL_Dust");
 	Motes->SetCastShadow(false);
+	// Hareketli küçük obje: uzaklık alanı / Lumen sahnesine girmesin (her kare güncelleme maliyeti)
+	Motes->bAffectDistanceFieldLighting = false;
+	Motes->bAffectDynamicIndirectLighting = false;
+	Motes->bVisibleInRayTracing = false;
 	Motes->SetCullDistances(0, 2500);
 	// Zerreler materyalde ~25 cm salınır: sınırlar biraz geniş olsun
 	Motes->SetBoundsScale(1.3f);

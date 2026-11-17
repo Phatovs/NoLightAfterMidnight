@@ -200,7 +200,7 @@ void ANLSecurityDesk::RefreshFeed()
 	{
 		if (Cameras[i])
 		{
-			Cameras[i]->SetFeedActive(i == ActiveIndex && IsPowered(), FeedRenderTarget);
+			Cameras[i]->SetFeedActive(i == ActiveIndex && IsPowered(), FeedRenderTarget, MonitorMesh);
 		}
 	}
 }

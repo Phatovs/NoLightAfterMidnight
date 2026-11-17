@@ -37,7 +37,7 @@ public:
 	FText GetLocationLabel() const { return LocationLabel; }
 
 	// Masa bu kamerayı monitöre bağlar/çözer
-	void SetFeedActive(bool bActive, UTextureRenderTarget2D* Target);
+	void SetFeedActive(bool bActive, UTextureRenderTarget2D* Target, UPrimitiveComponent* Screen = nullptr);
 
 	// Işığı yakar. Elektrik yoksa veya cooldown sürüyorsa false döner.
 	UFUNCTION(BlueprintCallable, Category = "NL|Camera")
@@ -98,4 +98,8 @@ private:
 	float FlashElapsed = -1.f;
 	float CooldownRemaining = 0.f;
 	bool bFeedActive = false;
+	// Görüntünün gösterildiği monitör: ekranda değilse kamera çizmez (performans)
+	TWeakObjectPtr<UPrimitiveComponent> FeedScreen;
+	float CaptureCooldown = 0.f;
+	void TickFeed(float DeltaSeconds);
 };

@@ -121,6 +121,10 @@ ANLPlayerCharacter::ANLPlayerCharacter()
 	}
 	FlashlightMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	FlashlightMesh->SetCastShadow(false);
+	// Hareketli küçük obje: uzaklık alanı / Lumen sahnesine girmesin (her kare güncelleme maliyeti)
+	FlashlightMesh->bAffectDistanceFieldLighting = false;
+	FlashlightMesh->bAffectDynamicIndirectLighting = false;
+	FlashlightMesh->bVisibleInRayTracing = false;
 
 	Flashlight = CreateDefaultSubobject<UNLFlashlightComponent>(TEXT("Flashlight"));
 	Flashlight->SetupAttachment(FlashlightPivot);
@@ -132,6 +136,10 @@ ANLPlayerCharacter::ANLPlayerCharacter()
 
 	CarryCanMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CarryCanMesh"));
 	CarryCanMesh->SetupAttachment(CarryCanPivot);
+	// Hareketli küçük obje: uzaklık alanı / Lumen sahnesine girmesin (her kare güncelleme maliyeti)
+	CarryCanMesh->bAffectDistanceFieldLighting = false;
+	CarryCanMesh->bAffectDynamicIndirectLighting = false;
+	CarryCanMesh->bVisibleInRayTracing = false;
 	CarryCanMesh->SetStaticMesh(CylinderFinder.Get());
 	CarryCanMesh->SetRelativeLocation(FVector(0.f, 0.f, -20.f));
 	CarryCanMesh->SetRelativeScale3D(FVector(0.22f, 0.22f, 0.36f));
@@ -3019,7 +3027,15 @@ void ANLPlayerCharacter::NLDebugPerf()
 				return false;
 			}));
 		}), T0 + 2.5f, false);
-		if (i == 1 || i == 2)
+		if (i == 3)
+		{
+			FTimerHandle H4;
+			TM.SetTimer(H4, FTimerDelegate::CreateWeakLambda(this, [this]()
+			{
+				if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("stat dumpframe -ms=0.25 -root=GameThread"));
+			}), T0 + 4.5f, false);
+		}
+		if (i == 2 || i == 4)
 		{
 			TM.SetTimer(H3, FTimerDelegate::CreateWeakLambda(this, [this]()
 			{

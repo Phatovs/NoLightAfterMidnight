@@ -705,7 +705,25 @@ def make_jerrycan():
     save(m, "SM_NL_JerryCan", ["MI_NL_JerryRed", "MI_NL_Metal"], coll, unreal.GeometryScriptCollisionGenerationMethod.ALIGNED_BOXES)
 
 
-for fn in (make_boat, make_outboard, make_oar, make_desk, make_crt, make_chair, make_jerrycan):
+def make_flashlight():
+    # Eski tip metal el feneri: orijin = arka kapak, fener +X'e bakar (toplam ~22 cm). Yuva 1 = cam
+    m = mesh()
+    X = (-90, 0, 0)  # silindir ekseni +X
+    P.append_cylinder(m, opts(0), T(loc=(0, 0, 0), rot=X), 2.15, 1.6, 16, 0, True, BASE)
+    P.append_cylinder(m, opts(0), T(loc=(1.6, 0, 0), rot=X), 1.85, 13.6, 16, 0, True, BASE)
+    for x in (3.0, 4.6, 6.2, 7.8, 9.4):
+        P.append_cylinder(m, opts(0), T(loc=(x, 0, 0), rot=X), 2.0, 0.55, 16, 0, True, BASE)
+    P.append_cylinder(m, opts(0), T(loc=(14.6, 0, 0), rot=X), 2.05, 0.6, 16, 0, True, BASE)
+    P.append_box(m, opts(0), T(loc=(11.8, 0, 1.95)), 2.4, 1.2, 0.9, 0, 0, 0, CENTER)
+    P.append_box(m, opts(0), T(loc=(11.8, 0, 2.45)), 1.0, 0.8, 0.6, 0, 0, 0, CENTER)
+    P.append_cone(m, opts(0), T(loc=(15.2, 0, 0), rot=X), 1.85, 2.85, 4.6, 16, 1, False, BASE)
+    P.append_cylinder(m, opts(0), T(loc=(19.8, 0, 0), rot=X), 3.1, 1.9, 18, 0, True, BASE)
+    P.append_cylinder(m, opts(1), T(loc=(21.65, 0, 0), rot=X), 2.65, 0.3, 18, 0, True, BASE)
+    P.append_torus(m, opts(0), T(loc=(-0.6, 0, -1.6), rot=(0, 0, 90)), unreal.GeometryScriptRevolveOptions(), 1.1, 0.25, 10, 6, CENTER)
+    save(m, "SM_NL_Flashlight", ["MI_NL_Metal", "MI_NL_LH_Glass"])
+
+
+for fn in (make_boat, make_outboard, make_oar, make_desk, make_crt, make_chair, make_jerrycan, make_flashlight):
     if _only and fn.__name__ not in _only:
         continue
     try:

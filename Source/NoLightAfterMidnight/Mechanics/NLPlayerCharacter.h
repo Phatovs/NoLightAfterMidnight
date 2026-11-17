@@ -165,6 +165,14 @@ public:
 	UFUNCTION(Exec) void NLDebugDropCan();
 	// Test: duraklatma menüsünü aç, görüntü al, kapat
 	UFUNCTION(Exec) void NLDebugPauseMenu();
+	// Fener elde yürürken bilek ve fener modeli: yakın 3. şahıs + 1. şahıs kareleri
+	UFUNCTION(Exec) void NLDebugHandShots();
+	// Yol fenerleri: her fenere bir öncekinin yanından göz hizasından bakan kareler + üstten görünüm
+	UFUNCTION(Exec) void NLDebugGuideShots();
+	// Fener ve deniz feneri teklemesi: kısa aralıkla tekletip ışık şiddetini loglar
+	UFUNCTION(Exec) void NLDebugStutter();
+	// Performans: tipik oyun noktalarında kare/oyun/çizim/GPU süresi + ProfileGPU dökümü
+	UFUNCTION(Exec) void NLDebugPerf();
 
 	// Sinematik (açılış): arayüz gizli, oyuncu kontrolü kapalı
 	void SetCinematicMode(bool bOn);

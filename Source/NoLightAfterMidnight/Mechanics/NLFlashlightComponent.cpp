@@ -63,6 +63,16 @@ void UNLFlashlightComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 			SetIntensity(OnIntensity * (FMath::FRand() < 0.3f ? 0.05f : FMath::FRandRange(0.4f, 1.f)));
 		}
 	}
+	else
+	{
+		// Ara ara göz kırpar gibi tekler
+		const float M = Stutter.Update(GetWorld()->GetTimeSeconds());
+		if (!FMath::IsNearlyEqual(M, StutterMul))
+		{
+			StutterMul = M;
+			SetIntensity(OnIntensity * M);
+		}
+	}
 }
 
 void UNLFlashlightComponent::Toggle()
@@ -97,5 +107,6 @@ void UNLFlashlightComponent::AddCharge(float Amount)
 
 void UNLFlashlightComponent::ApplyLight()
 {
+	StutterMul = 1.f;
 	SetIntensity(bOn ? OnIntensity : 0.f);
 }

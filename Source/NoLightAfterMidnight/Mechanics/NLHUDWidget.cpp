@@ -17,6 +17,7 @@
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/Texture2D.h"
 #include "Styling/CoreStyle.h"
+#include "Brushes/SlateRoundedBoxBrush.h"
 #include "Misc/DateTime.h"
 #include "NLInteractable.h"
 #include "NLHideDoor.h"
@@ -142,15 +143,14 @@ void UNLHUDWidget::BuildDefaultLayout()
 		UCanvasPanelSlot* XS = Root->AddChildToCanvas(Crosshair);
 		XS->SetAnchors(FAnchors(0.5f, 0.5f));
 		XS->SetAlignment(FVector2D(0.5f, 0.5f));
-		XS->SetSize(FVector2D(20.f, 20.f));
+		XS->SetSize(FVector2D(10.f, 10.f));
 		Crosshair->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
-		const FLinearColor C(1.f, 1.f, 1.f, 0.75f);
-		// Ortası boş artı (4 kısa çizgi) + merkez noktası
-		CrosshairParts.Add(MakeRect(Crosshair, TEXT("CrossL"), FVector2D(0.f, 9.f), FVector2D(6.f, 2.f), C));
-		CrosshairParts.Add(MakeRect(Crosshair, TEXT("CrossR"), FVector2D(14.f, 9.f), FVector2D(6.f, 2.f), C));
-		CrosshairParts.Add(MakeRect(Crosshair, TEXT("CrossT"), FVector2D(9.f, 0.f), FVector2D(2.f, 6.f), C));
-		CrosshairParts.Add(MakeRect(Crosshair, TEXT("CrossB"), FVector2D(9.f, 14.f), FVector2D(2.f, 6.f), C));
-		CrosshairParts.Add(MakeRect(Crosshair, TEXT("CrossDot"), FVector2D(9.f, 9.f), FVector2D(2.f, 2.f), C));
+		// Sade yuvarlak nokta; arkasında hafif koyu halka (aydınlık yüzeylerde de seçilsin)
+		UImage* Halo = MakeRect(Crosshair, TEXT("CrossHalo"), FVector2D(0.f, 0.f), FVector2D(10.f, 10.f), FLinearColor::White);
+		Halo->SetBrush(FSlateRoundedBoxBrush(FLinearColor(0.f, 0.f, 0.f, 0.35f), 5.f));
+		UImage* Dot = MakeRect(Crosshair, TEXT("CrossDot"), FVector2D(2.5f, 2.5f), FVector2D(5.f, 5.f), FLinearColor(1.f, 1.f, 1.f, 0.75f));
+		Dot->SetBrush(FSlateRoundedBoxBrush(FLinearColor::White, 2.5f));
+		CrosshairParts.Add(Dot);
 	}
 	FuelCanText = MakeText(Root, TEXT("FuelCanText"), TEXT("Carrying fuel can"), 16, FVector2D(0, 1), FVector2D(0, 1), FVector2D(40, -60), Dim);
 	BuildStaminaGauge(Root);
@@ -619,7 +619,7 @@ void UNLHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 		const bool bShowCross = Mode == ENLPlayerMode::Walking && !Player->IsBusy();
 		SetShown(Crosshair, bShowCross);
 		CrosshairFocus = FMath::FInterpTo(CrosshairFocus, Player->GetFocusedActor() ? 1.f : 0.f, InDeltaTime, 14.f);
-		Crosshair->SetRenderScale(FVector2D(1.f + 0.45f * CrosshairFocus));
+		Crosshair->SetRenderScale(FVector2D(1.f + 0.35f * CrosshairFocus));
 		const FLinearColor C = FMath::Lerp(FLinearColor(1.f, 1.f, 1.f, 0.6f), FLinearColor(1.f, 0.95f, 0.75f, 1.f), CrosshairFocus);
 		for (UImage* Part : CrosshairParts) if (Part) Part->SetColorAndOpacity(C);
 	}

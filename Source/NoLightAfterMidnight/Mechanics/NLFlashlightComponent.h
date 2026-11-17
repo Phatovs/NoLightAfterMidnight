@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "NLLightStutter.h"
 #include "Components/SpotLightComponent.h"
 #include "NLFlashlightComponent.generated.h"
 
@@ -29,6 +30,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "NL|Flashlight") bool IsOn() const { return bOn; }
 	// Açık havada mı (üstünde çatı yok): pil daha hızlı biter
 	bool IsOutdoors() const { return bOutdoors; }
+	// Tekleme aralığı (saniye); test için kısaltılabilir
+	void SetStutterInterval(const FVector2D& Range) { Stutter = FNLLightStutter(); Stutter.Interval = Range; }
 
 protected:
 	virtual void BeginPlay() override;
@@ -55,6 +58,9 @@ private:
 	bool bOn = false;
 	bool bDocked = false;
 	float FlickerTimer = 0.f;
+	// Pil dolu olsa da ara ara teklesin (eski fener)
+	FNLLightStutter Stutter;
+	float StutterMul = 1.f;
 	bool bOutdoors = false;
 	float OutdoorCheckTimer = 0.f;
 

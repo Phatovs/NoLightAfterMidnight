@@ -238,12 +238,14 @@ void ANLLighthouse::BeginPlay()
 		}
 	}
 	LensMID = Lens->CreateAndSetMaterialInstanceDynamic(0);
+	Stutter.Interval = FVector2D(14.f, 35.f);
 	ApplyLit(1.f);
 }
 
-void ANLLighthouse::ApplyLit(float Alpha)
+void ANLLighthouse::ApplyLit(float InAlpha)
 {
-	LitAlpha = Alpha;
+	LitAlpha = InAlpha;
+	const float Alpha = InAlpha * StutterMul;
 	SpotA->SetIntensity(BeamIntensity * Alpha);
 	SpotB->SetIntensity(BeamIntensity * Alpha);
 	RoomLight->SetIntensity(15.f * Alpha);
@@ -282,6 +284,14 @@ void ANLLighthouse::Tick(float DeltaSeconds)
 			if (Power->GetGenerator()) bWant = Power->HasPower();
 		}
 	}
+	// Tekleme: lamba yanıyorken ara ara kırpar
+	const float M = LitAlpha > 0.5f ? Stutter.Update(GetWorld()->GetTimeSeconds()) : 1.f;
+	if (!FMath::IsNearlyEqual(M, StutterMul))
+	{
+		StutterMul = M;
+		ApplyLit(LitAlpha);
+	}
+
 	const float Target = bWant ? 1.f : 0.f;
 	if (!FMath::IsNearlyEqual(LitAlpha, Target))
 	{

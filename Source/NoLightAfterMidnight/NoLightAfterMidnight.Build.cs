@@ -21,7 +21,10 @@ public class NoLightAfterMidnight : ModuleRules
 			"Slate",
 			"SlateCore",
 			"NavigationSystem",
-			"AnimationCore"
+			"AnimationCore",
+			"ImageWrapper",
+			"RenderCore",
+			"RHI"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "ApplicationCore" });

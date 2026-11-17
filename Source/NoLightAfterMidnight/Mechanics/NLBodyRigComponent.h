@@ -114,4 +114,8 @@ private:
 	void SolveLimb(FName Upper, FName Middle, FName End, const FVector& TargetWorld, const FVector& PoleWorld, float Alpha, const FQuat* KeepEndRotationCS = nullptr);
 	void RotateBoneWorldAxis(FName Bone, const FVector& AxisWorld, float Degrees);
 	void PlaceHeldProps();
+	// Bileği animasyondan bağımsız yap: el ön kolun düz devamı olur (yürürken bilekten sallanmasın).
+	// AimWorld verilirse el o yöne (en fazla MaxBendDeg kadar) bükülür, örn. tutulan fenerin yönü.
+	void StraightenWrist(FName Middle, FName End, float Alpha, const FVector* AimWorld = nullptr, float MaxBendDeg = 55.f);
+	FQuat HeldFlashlightRotation() const;
 };

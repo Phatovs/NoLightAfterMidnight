@@ -181,6 +181,15 @@ void UNLBodyRigComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 			const FVector Shoulder = BoneWorld(UpperArmR);
 			const FVector PoleR = FMath::Lerp(Shoulder - Up * 60.f + Right * 40.f - Fwd * 25.f, Shoulder + Right * 80.f + Up * 10.f, FMath::Clamp(Input.ElbowsOut, 0.f, 1.f));
 			SolveLimb(UpperArmR, LowerArmR, HandR, T, PoleR, A);
+			if (Input.bHoldFlashlight)
+			{
+				const FVector AimDir = HeldFlashlightRotation().GetForwardVector();
+				StraightenWrist(LowerArmR, HandR, A, &AimDir);
+			}
+			else
+			{
+				StraightenWrist(LowerArmR, HandR, A);
+			}
 		}
 	}
 
@@ -198,6 +207,7 @@ void UNLBodyRigComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 			const FVector Shoulder = BoneWorld(UpperArmL);
 			const FVector PoleL = FMath::Lerp(Shoulder - Up * 60.f - Right * 40.f - Fwd * 25.f, Shoulder - Right * 80.f + Up * 10.f, FMath::Clamp(Input.ElbowsOut, 0.f, 1.f));
 			SolveLimb(UpperArmL, LowerArmL, HandL, T, PoleL, 1.f);
+			StraightenWrist(LowerArmL, HandL, FMath::Max(FMath::Max(IdleHold, Desk), FMath::Max3(Work, ReachL, Pour)));
 		}
 	}
 
@@ -225,9 +235,6 @@ void UNLBodyRigComponent::PlaceHeldProps()
 {
 	using namespace NLBones;
 	const FRotator YawRot(0.f, GetOwner()->GetActorRotation().Yaw, 0.f);
-	const float Aim = FMath::Clamp(Input.FlashlightAim, 0.f, 1.f);
-	const float Sit = FMath::Clamp(Input.SitAlpha, 0.f, 1.f);
-
 	if (FlashlightPivot)
 	{
 		FlashlightPivot->SetVisibility(Input.bHoldFlashlight || Input.bFlashlightRest, true);
@@ -238,11 +245,7 @@ void UNLBodyRigComponent::PlaceHeldProps()
 		}
 		else if (Input.bHoldFlashlight)
 		{
-			const FQuat Lowered = FRotator(-35.f, YawRot.Yaw, 0.f).Quaternion();
-			const FQuat Aimed = Input.View.GetRotation();
-			const FQuat OnDesk = FRotator(-6.f, YawRot.Yaw, 0.f).Quaternion();
-			FQuat R = FQuat::Slerp(Lowered, Aimed, Aim);
-			R = FQuat::Slerp(R, OnDesk, Sit * (1.f - Aim));
+			const FQuat R = HeldFlashlightRotation();
 			const FVector Hand = GetSocketLocation(HandR);
 			FlashlightPivot->SetWorldLocationAndRotation(Hand + R.RotateVector(FVector(2.f, 0.f, -2.f)), R);
 		}
@@ -263,4 +266,51 @@ void UNLBodyRigComponent::PlaceHeldProps()
 			CanPivot->SetWorldLocationAndRotation(FMath::Lerp(Carried, Input.CanOverride.GetLocation(), Pour), Rot);
 		}
 	}
+}
+
+FQuat UNLBodyRigComponent::HeldFlashlightRotation() const
+{
+	const float Yaw = GetOwner() ? GetOwner()->GetActorRotation().Yaw : 0.f;
+	const float Aim = FMath::Clamp(Input.FlashlightAim, 0.f, 1.f);
+	const float Sit = FMath::Clamp(Input.SitAlpha, 0.f, 1.f);
+	const FQuat Lowered = FRotator(-35.f, Yaw, 0.f).Quaternion();
+	const FQuat Aimed = Input.View.GetRotation();
+	const FQuat OnDesk = FRotator(-6.f, Yaw, 0.f).Quaternion();
+	FQuat R = FQuat::Slerp(Lowered, Aimed, Aim);
+	return FQuat::Slerp(R, OnDesk, Sit * (1.f - Aim));
+}
+
+void UNLBodyRigComponent::StraightenWrist(FName Middle, FName End, float Alpha, const FVector* AimWorld, float MaxBendDeg)
+{
+	Alpha = FMath::Clamp(Alpha, 0.f, 1.f);
+	if (Alpha <= KINDA_SMALL_NUMBER || !GetSkinnedAsset()) return;
+	const int32 MidIdx = GetBoneIndex(Middle);
+	const int32 EndIdx = GetBoneIndex(End);
+	if (MidIdx == INDEX_NONE || EndIdx == INDEX_NONE) return;
+	const FReferenceSkeleton& Ref = GetSkinnedAsset()->GetRefSkeleton();
+	if (Ref.GetParentIndex(EndIdx) != MidIdx) return;
+
+	const FTransform B = GetBoneTransformByName(Middle, EBoneSpaces::ComponentSpace);
+	FTransform C = GetBoneTransformByName(End, EBoneSpaces::ComponentSpace);
+
+	// Referans pozdaki (düz) bilek açısı, IK sonrası ön kolun üstüne
+	FQuat Straight = B.GetRotation() * Ref.GetRefBonePose()[EndIdx].GetRotation();
+	Straight.Normalize();
+
+	if (AimWorld)
+	{
+		const FVector Forearm = (C.GetLocation() - B.GetLocation()).GetSafeNormal();
+		const FVector AimCS = GetComponentTransform().InverseTransformVectorNoScale(*AimWorld).GetSafeNormal();
+		if (!Forearm.IsNearlyZero() && !AimCS.IsNearlyZero())
+		{
+			FQuat Bend = FQuat::FindBetweenNormals(Forearm, AimCS);
+			FVector Axis; float Angle;
+			Bend.ToAxisAndAngle(Axis, Angle);
+			Angle = FMath::Min(Angle, FMath::DegreesToRadians(MaxBendDeg));
+			Straight = FQuat(Axis, Angle) * Straight;
+		}
+	}
+
+	C.SetRotation(FQuat::Slerp(C.GetRotation(), Straight, Alpha).GetNormalized());
+	SetBoneTransformByName(End, C, EBoneSpaces::ComponentSpace);
 }

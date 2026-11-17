@@ -8,6 +8,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "NLLightStutter.h"
 #include "GameFramework/Actor.h"
 #include "NLLighthouse.generated.h"
 
@@ -56,6 +57,7 @@ public:
 	UPROPERTY(EditAnywhere, Category = "NL|Lighthouse|Light") float InteriorLampIntensity = 6.f;
 
 	bool IsLit() const { return LitAlpha > 0.5f; }
+	void SetStutterInterval(const FVector2D& Range) { Stutter = FNLLightStutter(); Stutter.Interval = Range; }
 
 	// Ana menü: huzme kendi dönmez, verilen noktaya (fare imleci) döner; görünen huzme o noktada biter
 	void AimAt(const FVector& WorldPoint, float Speed = 6.f);
@@ -86,6 +88,9 @@ private:
 	UPROPERTY(Transient) TArray<TObjectPtr<UMaterialInstanceDynamic>> BeamMIDs;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> LensMID;
 	float LitAlpha = 1.f;
+	// Eski lamba: ara ara tekler (oyunda ve menüde)
+	FNLLightStutter Stutter;
+	float StutterMul = 1.f;
 	bool bManualAim = false;
 	FVector AimPoint = FVector::ZeroVector;
 	float AimSpeed = 6.f;

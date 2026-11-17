@@ -32,6 +32,7 @@
 #include "NLFlashlightCharger.h"
 #include "NLGuideLanterns.h"
 #include "NLLighthouse.h"
+#include "NLSwingDoor.h"
 #include "RHI.h"
 #include "Containers/Ticker.h"
 #include "Components/PointLightComponent.h"
@@ -3109,6 +3110,8 @@ void ANLPlayerCharacter::NLDebugClimb()
 	FCollisionQueryParams Q(SCENE_QUERY_STAT(NLClimb), false, this);
 	if (GetWorld()->LineTraceSingleByChannel(Hit, Start + FVector(0, 0, 200.f), Start - FVector(0, 0, 300.f), ECC_Visibility, Q)) Start.Z = Hit.ImpactPoint.Z;
 	SetActorLocation(Start + FVector(0, 0, HH + 2.f), false, nullptr, ETeleportType::TeleportPhysics);
+	// Kapıları aç (kule kapısı kapalı başlar)
+	for (TActorIterator<ANLSwingDoor> It(GetWorld()); It; ++It) It->SetOpen(true, true);
 	if (!Flashlight->IsOn()) Flashlight->Toggle();
 	UE_LOG(LogTemp, Log, TEXT("NLClimb: start at z %.0f (lighthouse z %.0f), capsule r %.0f hh %.0f"), GetActorLocation().Z, X.GetLocation().Z, GetCapsuleComponent()->GetScaledCapsuleRadius(), HH);
 
@@ -3198,4 +3201,58 @@ void ANLPlayerCharacter::NLDebugClimb()
 			if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("quit"));
 		}
 	}), 0.02f, true, 1.0f);
+}
+
+void ANLPlayerCharacter::NLDebugLHViews()
+{
+	ANLLighthouse* LH = nullptr;
+	for (TActorIterator<ANLLighthouse> It(GetWorld()); It; ++It) { LH = *It; break; }
+	if (!LH) return;
+	const FTransform X = LH->GetActorTransform();
+	FTimerManager& TM = GetWorldTimerManager();
+	auto At = [this, &TM](float Time, TFunction<void()> Fn)
+	{
+		FTimerHandle H;
+		TM.SetTimer(H, FTimerDelegate::CreateWeakLambda(this, [Fn]() { Fn(); }), Time, false);
+	};
+	auto View = [this, X](const FVector& LocalCam, const FVector& LocalLook, const FString& Name)
+	{
+		APlayerController* PC = Cast<APlayerController>(GetController());
+		if (!PC) return;
+		if (!DebugCamera) DebugCamera = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform::Identity);
+		FVector Cam = X.TransformPosition(LocalCam);
+		// Kamerayı zeminin 170 cm üstüne oturt
+		FHitResult Hit;
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(NLLHView), false, this);
+		if (LocalCam.Z < 0.f && GetWorld()->LineTraceSingleByChannel(Hit, Cam + FVector(0, 0, 3000.f), Cam - FVector(0, 0, 3000.f), ECC_Visibility, Q)) Cam.Z = Hit.ImpactPoint.Z + 170.f;
+		const FVector Look = X.TransformPosition(LocalLook);
+		DebugCamera->SetActorLocationAndRotation(Cam, (Look - Cam).Rotation());
+		PC->SetViewTarget(DebugCamera);
+		// Fener ışığı sahneyi aydınlatsın diye oyuncu kameranın yanında
+		SetActorLocation(Cam + FVector(0, 0, -60.f), false, nullptr, ETeleportType::TeleportPhysics);
+		if (Controller) Controller->SetControlRotation((Look - Cam).Rotation());
+		UE_LOG(LogTemp, Log, TEXT("NLLHViews: %s"), *Name);
+	};
+	auto Shot = [this]() { if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("shot")); };
+	At(0.5f, [this]() { if (!Flashlight->IsOn()) Flashlight->Toggle(); });
+	float T = 1.2f;
+	for (int32 k = 0; k < 8; ++k)
+	{
+		const float A = FMath::DegreesToRadians(k * 45.f + 20.f);
+		const FVector Cam(400.f + FMath::Cos(A) * 1000.f, FMath::Sin(A) * 1000.f, -1.f);
+		At(T, [View, Cam, k]() { View(Cam, FVector(380.f, 0.f, 120.f), FString::Printf(TEXT("around %d"), k)); });
+		At(T + 0.8f, Shot);
+		T += 1.3f;
+	}
+	// Kapılar: kapalı ve açık
+	At(T, [View]() { View(FVector(670.f, -560.f, -1.f), FVector(670.f, -235.f, 160.f), TEXT("house door closed")); });
+	At(T + 0.8f, Shot);
+	At(T + 1.0f, [this]() { for (TActorIterator<ANLSwingDoor> It(GetWorld()); It; ++It) It->Interact(this); });
+	At(T + 2.0f, Shot);
+	T += 2.4f;
+	At(T, [View]() { View(FVector(700.f, 120.f, 210.f), FVector(300.f, -60.f, 80.f), TEXT("house inside")); });
+	At(T + 0.8f, Shot);
+	At(T + 1.3f, [View]() { View(FVector(-60.f, 60.f, 200.f), FVector(150.f, -150.f, 20.f), TEXT("tower inside floor")); });
+	At(T + 2.1f, Shot);
+	At(T + 3.f, [this]() { if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("quit")); });
 }

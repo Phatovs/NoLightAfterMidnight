@@ -1,4 +1,6 @@
 #include "NLLighthouse.h"
+#include "NLSwingDoor.h"
+#include "Kismet/GameplayStatics.h"
 #include "NLEnvKit.h"
 #include "NLPowerSubsystem.h"
 #include "Components/StaticMeshComponent.h"
@@ -42,6 +44,12 @@ ANLLighthouse::ANLLighthouse()
 	NL_KIT_MESH(InteriorLantern, "SM_NL_GuideLantern");
 	HouseMesh = SM(TEXT("House"), true);
 	NL_KIT_MESH(HouseMesh, "SM_NL_LH_House");
+	{
+		static ConstructorHelpers::FObjectFinderOptional<UStaticMesh> HD(TEXT("/Game/Environment/Kit/SM_NL_LH_DoorHouse.SM_NL_LH_DoorHouse"));
+		static ConstructorHelpers::FObjectFinderOptional<UStaticMesh> TD(TEXT("/Game/Environment/Kit/SM_NL_LH_DoorTower.SM_NL_LH_DoorTower"));
+		HouseDoorMesh = HD.Get();
+		TowerDoorMesh = TD.Get();
+	}
 
 	Boards = MakeISM(this, Root, TEXT("Boards"), true);
 	Windows = MakeISM(this, Root, TEXT("Windows"), false);
@@ -265,6 +273,7 @@ void ANLLighthouse::BeginPlay()
 		}
 	}
 	LensMID = Lens->CreateAndSetMaterialInstanceDynamic(0);
+	SpawnDoors();
 	if (HouseMesh)
 	{
 		const int32 G = HouseMesh->GetMaterialIndex(TEXT("MI_NL_WindowGlow"));
@@ -348,4 +357,32 @@ void ANLLighthouse::AimAt(const FVector& WorldPoint, float Speed)
 	}
 	AimPoint = WorldPoint;
 	AimSpeed = Speed;
+}
+
+void ANLLighthouse::SpawnDoors()
+{
+	using namespace NLLH;
+	if (!bBuildTower || !bBuildHouse || !GetWorld() || !GetWorld()->IsGameWorld()) return;
+	const float Sxy = BaseRadius / MeshBaseR;
+	const float Sz = TowerHeight / MeshH;
+	const float FloorZ = RoomBottom * Sz;
+	auto Make = [this](UStaticMesh* Mesh, const FVector& LocalPos, float LocalYaw, float OpenAngle)
+	{
+		FActorSpawnParameters SP;
+		SP.Owner = this;
+		const FTransform T = FTransform(FRotator(0.f, LocalYaw, 0.f), LocalPos) * GetActorTransform();
+		ANLSwingDoor* D = GetWorld()->SpawnActorDeferred<ANLSwingDoor>(ANLSwingDoor::StaticClass(), T, this);
+		if (!D) return;
+		D->OpenAngle = OpenAngle;
+		UGameplayStatics::FinishSpawningActor(D, T);
+		D->SetLeafMesh(Mesh);
+		D->AttachToComponent(Root, FAttachmentTransformRules::KeepWorldTransform);
+		Doors.Add(D);
+	};
+	// Evin kapısı: giriş çıkıntısının ön duvarında (X 615..725, duvar Y -240..-220), içeri (+Y) açılır
+	Make(HouseDoorMesh, FVector(617.f, -230.f, FloorZ), 0.f, 95.f);
+	// Kulenin kapısı: DOOR_A (300) derecede, duvarın ortasında; kanat kapalıyken teğet doğrultuda, içeri açılır
+	const float DoorA = 300.f;
+	const FVector Hinge = FRotator(0.f, DoorA, 0.f).RotateVector(FVector(245.f * Sxy, -58.f, 0.f)) + FVector(0.f, 0.f, FloorZ);
+	Make(TowerDoorMesh, Hinge, DoorA + 90.f, 90.f);
 }

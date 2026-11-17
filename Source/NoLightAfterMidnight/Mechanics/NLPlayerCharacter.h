@@ -177,6 +177,8 @@ public:
 	UFUNCTION(Exec) void NLDebugGenShots();
 	// Deniz feneri: oyuncuyu döner merdivenden gerçekten yürüterek tepeye çıkarır, fener odası ve balkondan kareler
 	UFUNCTION(Exec) void NLDebugClimb();
+	// Deniz feneri ve evin çevresinden (8 yön) ve içinden kareler, zemin oturumu kontrolü
+	UFUNCTION(Exec) void NLDebugLHViews();
 
 	// Sinematik (açılış): arayüz gizli, oyuncu kontrolü kapalı
 	void SetCinematicMode(bool bOn);

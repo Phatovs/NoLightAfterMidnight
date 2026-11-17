@@ -89,6 +89,10 @@ protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> RoomLight;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> HouseMesh;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> HouseLight;
+	UPROPERTY() TObjectPtr<class UStaticMesh> HouseDoorMesh;
+	UPROPERTY() TObjectPtr<class UStaticMesh> TowerDoorMesh;
+	UPROPERTY(Transient) TArray<TObjectPtr<class ANLSwingDoor>> Doors;
+	void SpawnDoors();
 
 private:
 	UPROPERTY(Transient) TArray<TObjectPtr<UMaterialInstanceDynamic>> BeamMIDs;

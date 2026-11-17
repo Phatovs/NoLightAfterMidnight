@@ -25,7 +25,9 @@ reset()
 OUT = out_dir("lighthouse_out")
 random.seed(17)
 WORN, BLACK, GLASS, STONE = "MI_NL_LH_Worn", "MI_NL_LH_Black", "MI_NL_LH_Glass", "MI_NL_Rock"
-ROOF, WOOD, WINGLOW, CONC = "MI_NL_LH_RoofMetal", "MI_NL_DeckWood", "MI_NL_WindowGlow", "MI_NL_World_Concrete"
+ROOF, WOOD, WINGLOW, CONC = "MI_NL_World_Metal", "MI_NL_DeckWood", "MI_NL_WindowGlow", "MI_NL_World_Concrete"
+# Kule dışı kırmızı-beyaz bantlı boya (yerel Z ile bant), iç ve süsler düz beyaz sıva
+PAINT, PLASTER = "MI_NL_LighthousePaint", "MI_NL_World_Plaster"
 
 
 def boolean(target, cutter, keep=False):
@@ -94,30 +96,34 @@ def at_door(ob):
 
 
 # ------------------------------------------------------------------ kule
-tower = cyl("tower", (0, 0, 500), 260, 1000, 'Z', WORN, seg=56, r2=170)
-shaft = cyl("shaft", (0, 0, 520.5), r_out(40) - WALL, 961, 'Z', WORN, seg=56, r2=r_out(1001) - WALL)
+tower = cyl("tower", (0, 0, 500), 260, 1000, 'Z', PAINT, seg=56, r2=170)
+shaft = cyl("shaft", (0, 0, 520.5), r_out(40) - WALL, 961, 'Z', PLASTER, seg=56, r2=r_out(1001) - WALL)
 boolean(tower, shaft)
-boolean(tower, at_door(box("door", (180, -60, 40), (300, 60, 255), WORN)))
+boolean(tower, at_door(box("door", (180, -60, 40), (300, 60, 255), PLASTER)))
 smooth_by_angle(tower)
 P = [tower]
-pl = cyl("plinth", (0, 0, 14), 272, 28, 'Z', WORN, seg=56, r2=268)
-boolean(pl, cyl("plinthcut", (0, 0, 14), 250, 40, 'Z', WORN, seg=56))
-boolean(pl, at_door(box("plinthdoor", (180, -60, -5), (300, 60, 40), WORN)))
+# Taş temel: zemin katının altından toprağa iner (eğimli arazide boşluk kalmasın)
+fd = cyl("found", (0, 0, -120), 274, 320, 'Z', STONE, seg=56, r2=272)
+boolean(fd, cyl("foundcut", (0, 0, 60), 200, 50, 'Z', STONE, seg=56))
+P.append(fd)
+pl = cyl("plinth", (0, 0, 14), 276, 28, 'Z', PLASTER, seg=56, r2=272)
+boolean(pl, cyl("plinthcut", (0, 0, 14), 250, 40, 'Z', PLASTER, seg=56))
+boolean(pl, at_door(box("plinthdoor", (180, -60, -5), (300, 60, 40), PLASTER)))
 P.append(pl)
-P.append(cyl("collar1", (0, 0, 958), 182, 16, 'Z', WORN, seg=56, r2=184))
-P.append(cyl("collar2", (0, 0, 982), 186, 36, 'Z', WORN, seg=56, r2=204))
+P.append(cyl("collar1", (0, 0, 958), 182, 16, 'Z', PLASTER, seg=56, r2=184))
+P.append(cyl("collar2", (0, 0, 982), 186, 36, 'Z', PLASTER, seg=56, r2=204))
 P.append(cyl("collarBand", (0, 0, 940), 177, 10, 'Z', BLACK, seg=56, r2=176))
 for c in P[-3:]:
-    boolean(c, cyl("collarcut", (0, 0, 960), r_out(1000) - WALL, 120, 'Z', WORN, seg=56))
+    boolean(c, cyl("collarcut", (0, 0, 960), r_out(1000) - WALL, 120, 'Z', PLASTER, seg=56))
 for y in (-66.0, 60.0):
-    P.append(at_door(box("doorjamb", (226, y, 40), (252, y + 6, 262), WORN, 1.0)))
-P.append(at_door(box("doorhead", (224, -66, 255), (254, 66, 268), WORN, 1.0)))
+    P.append(at_door(box("doorjamb", (226, y, 40), (256, y + 6, 262), PLASTER, 1.0)))
+P.append(at_door(box("doorhead", (224, -66, 255), (258, 66, 270), PLASTER, 1.0)))
 # Kapı önü taş basamaklar (dışarı doğru iner; zemin yüksekse toprağa gömülür)
 for k in range(3):
     P.append(at_door(box("tstep%d" % k, (262 + k * 30, -62, 40 - 15 * (k + 1) - 20), (300 + k * 30, 62, 40 - 15 * k), STONE, 1.5)))
 P.append(cyl("floor", (0, 0, 38), r_out(40) - WALL + 2, 4, 'Z', STONE, seg=56))
 # Merkez sütun ve döner merdiven
-P.append(cyl("column", (0, 0, (STAIR0 + STAIR_TOP) / 2), 18, STAIR_TOP - STAIR0, 'Z', WORN, seg=20))
+P.append(cyl("column", (0, 0, (STAIR0 + STAIR_TOP) / 2), 18, STAIR_TOP - STAIR0, 'Z', PLASTER, seg=20))
 for i in range(NSTEP):
     zt = STAIR0 + (i + 1) * RISE
     a0 = START_A + i * STEP_A
@@ -210,133 +216,221 @@ P.append(box("dhead", (145, -56, 204), (161, 56, 212), BLACK, 0.4))
 lr = join("SM_NL_LH_LanternRoom", P, uv_size=0.6)
 export(lr, OUT)
 
-# ------------------------------------------------------------------ bekçi evi
-HX0, HX1, HY, WT, WH = 250.0, 810.0, 210.0, 20.0, 280.0
+# ------------------------------------------------------------------ bekçi evi (referans: beyaz sıvalı, gri metal çatılı,
+# önde üçgen alınlıklı giriş çıkıntısı, baca kule tarafında, gri taş temel)
+# Kapı kanatları ayrı aktör (ANLSwingDoor, açılıp kapanır); burada sadece boşluk ve söve var.
+HX0, HX1, HY, WT, WH = 250.0, 810.0, 200.0, 20.0, 270.0
+RISE_R = 130.0                       # ana çatı yüksekliği (sırt Z 400)
+BX0, BX1, BY = 560.0, 780.0, 240.0   # giriş çıkıntısı (alınlık): X aralığı, ön yüzü Y -240
+BRISE = 105.0
+DOOR_X0, DOOR_X1, DOOR_H = 615.0, 725.0, 215.0
 P = []
 
 
-def wall_y(y_face, s, x0, x1, holes):
-    """Y'de duran uzun duvar: holes = [(x0, x1, z0, z1)]"""
-    y0, y1 = sorted((y_face, y_face - s * WT))
-    w = box("wallY", (x0, y0, -2), (x1, y1, WH), WORN, 0.8)
-    for (a, b, z0, z1) in holes:
-        boolean(w, box("hole", (a, y0 - 5, z0), (b, y1 + 5, z1), WORN))
+def wall(name, lo, hi, holes, m=PLASTER):
+    w = box(name, lo, hi, m, 0.6)
+    for (a, b) in holes:
+        boolean(w, box("hole", a, b, m))
     P.append(w)
+    return w
 
 
-def wall_x(x_face, s, holes, gable=True):
-    x0, x1 = sorted((x_face, x_face - s * WT))
-    w = box("wallX", (x0, -HY, -2), (x1, HY, WH), WORN, 0.8)
-    for (a, b, z0, z1) in holes:
-        boolean(w, box("hole", (x0 - 5, a, z0), (x1 + 5, b, z1), WORN))
-    P.append(w)
-    if gable:
-        P.append(poly_prism_x("gable", x0, x1, [(-HY, WH), (HY, WH), (0, WH + RISE_R)], WORN))
-
-
-def poly_prism_x(name, x0, x1, pts_yz, m):
+def tri_prism_x(name, x0, x1, y0, y1, z0, rise, m):
+    """X yüzünde duran üçgen alınlık (taban y0..y1, z0'dan rise kadar yükselir)"""
     bm = bmesh.new()
-    a = [bm.verts.new(to_bl(x0, y, z)) for (y, z) in pts_yz]
-    b = [bm.verts.new(to_bl(x1, y, z)) for (y, z) in pts_yz]
+    pts = [(y0, z0), (y1, z0), ((y0 + y1) / 2, z0 + rise)]
+    a = [bm.verts.new(to_bl(x0, y, z)) for (y, z) in pts]
+    b = [bm.verts.new(to_bl(x1, y, z)) for (y, z) in pts]
     bm.faces.new(a)
     bm.faces.new(list(reversed(b)))
-    n = len(pts_yz)
-    for i in range(n):
-        j = (i + 1) % n
+    for i in range(3):
+        j = (i + 1) % 3
         bm.faces.new([a[i], a[j], b[j], b[i]])
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
     return finish(new_obj(name, bm), m)
 
 
-def window(cx_or_cy, face, z0, z1, w, along='X'):
-    """Pencere: beyaz söve, koyu kayıtlar, ışıklı cam (C++ yakar/söndürür)"""
+def tri_prism_y(name, y0, y1, x0, x1, z0, rise, m):
+    """Y yüzünde duran üçgen alınlık"""
+    bm = bmesh.new()
+    pts = [(x0, z0), (x1, z0), ((x0 + x1) / 2, z0 + rise)]
+    a = [bm.verts.new(to_bl(x, y0, z)) for (x, z) in pts]
+    b = [bm.verts.new(to_bl(x, y1, z)) for (x, z) in pts]
+    bm.faces.new(a)
+    bm.faces.new(list(reversed(b)))
+    for i in range(3):
+        j = (i + 1) % 3
+        bm.faces.new([a[i], a[j], b[j], b[i]])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    return finish(new_obj(name, bm), m)
+
+
+def roof_plane(name, p0, p1, p2, p3, thick, m):
+    """4 köşeli eğimli çatı levhası (alt yüz noktaları), kalınlık normal yönünde"""
+    bm = bmesh.new()
+    pts = [Vector(p) for p in (p0, p1, p2, p3)]
+    n = (pts[1] - pts[0]).cross(pts[3] - pts[0]).normalized()
+    if n.z < 0:
+        n = -n
+    lo = [bm.verts.new(to_bl(*p)) for p in pts]
+    hi = [bm.verts.new(to_bl(*(p + n * thick))) for p in pts]
+    bm.faces.new(lo)
+    bm.faces.new(list(reversed(hi)))
+    for i in range(4):
+        j = (i + 1) % 4
+        bm.faces.new([lo[i], lo[j], hi[j], hi[i]])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    return finish(new_obj(name, bm), m)
+
+
+def window_y(cx, yface, s, z0, z1, w):
+    """Y yüzündeki pencere (s: dışa doğru +1/-1): sıva söve, gri denizlik, koyu kayıtlar, ışıklı cam"""
     hw = w / 2.0
-    if along == 'X':   # Y yüzünde, X boyunca
-        y = face
-        s = 1 if y > 0 else -1
-        yo = (min(y, y + s * 4), max(y, y + s * 4))
-        P.append(box("wsill", (cx_or_cy - hw - 6, min(y, y + s * 8), z0 - 6), (cx_or_cy + hw + 6, max(y, y + s * 8), z0), WORN, 1.0))
-        P.append(box("wtop", (cx_or_cy - hw - 5, yo[0], z1), (cx_or_cy + hw + 5, yo[1], z1 + 7), WORN, 0.8))
-        for xx in (cx_or_cy - hw - 5, cx_or_cy + hw):
-            P.append(box("wside", (xx, yo[0], z0), (xx + 5, yo[1], z1), WORN, 0.6))
-        P.append(box("wglass", (cx_or_cy - hw, y - s * 12 - 0.5, z0), (cx_or_cy + hw, y - s * 12 + 0.5, z1), WINGLOW))
-        P.append(box("wbarV", (cx_or_cy - 1.5, y - s * 12 - 2, z0), (cx_or_cy + 1.5, y - s * 12 + 2, z1), BLACK))
-        P.append(box("wbarH", (cx_or_cy - hw, y - s * 12 - 2, (z0 + z1) / 2 - 1.5), (cx_or_cy + hw, y - s * 12 + 2, (z0 + z1) / 2 + 1.5), BLACK))
-    else:              # X yüzünde, Y boyunca
-        x = face
-        s = 1 if x > 0 else -1
-        xo = (min(x, x + s * 4), max(x, x + s * 4))
-        P.append(box("wsill", (min(x, x + s * 8), cx_or_cy - hw - 6, z0 - 6), (max(x, x + s * 8), cx_or_cy + hw + 6, z0), WORN, 1.0))
-        P.append(box("wtop", (xo[0], cx_or_cy - hw - 5, z1), (xo[1], cx_or_cy + hw + 5, z1 + 7), WORN, 0.8))
-        for yy in (cx_or_cy - hw - 5, cx_or_cy + hw):
-            P.append(box("wside", (xo[0], yy, z0), (xo[1], yy + 5, z1), WORN, 0.6))
-        P.append(box("wglass", (x - s * 12 - 0.5, cx_or_cy - hw, z0), (x - s * 12 + 0.5, cx_or_cy + hw, z1), WINGLOW))
-        P.append(box("wbarV", (x - s * 12 - 2, cx_or_cy - 1.5, z0), (x - s * 12 + 2, cx_or_cy + 1.5, z1), BLACK))
-        P.append(box("wbarH", (x - s * 12 - 2, cx_or_cy - hw, (z0 + z1) / 2 - 1.5), (x - s * 12 + 2, cx_or_cy + hw, (z0 + z1) / 2 + 1.5), BLACK))
+    yo = sorted((yface, yface + s * 5))
+    P.append(box("wsill", (cx - hw - 8, min(yface, yface + s * 9), z0 - 7), (cx + hw + 8, max(yface, yface + s * 9), z0), CONC, 1.0))
+    P.append(box("wtrimT", (cx - hw - 7, yo[0], z1), (cx + hw + 7, yo[1], z1 + 9), PLASTER, 0.8))
+    for xx in (cx - hw - 7, cx + hw):
+        P.append(box("wtrimS", (xx, yo[0], z0), (xx + 7, yo[1], z1), PLASTER, 0.6))
+    gy = yface - s * 11
+    P.append(box("wglass", (cx - hw, gy - 0.5, z0), (cx + hw, gy + 0.5, z1), WINGLOW))
+    P.append(box("wframe", (cx - hw, gy - 2.5, z0), (cx + hw, gy + 2.5, z0 + 4), BLACK))
+    P.append(box("wframe", (cx - hw, gy - 2.5, z1 - 4), (cx + hw, gy + 2.5, z1), BLACK))
+    P.append(box("wbarV", (cx - 1.8, gy - 2.5, z0), (cx + 1.8, gy + 2.5, z1), BLACK))
+    for f in (1 / 3.0, 2 / 3.0):
+        zz = z0 + (z1 - z0) * f
+        P.append(box("wbarH", (cx - hw, gy - 2.5, zz - 1.5), (cx + hw, gy + 2.5, zz + 1.5), BLACK))
 
 
-RISE_R = 150.0
-# Duvarlar: kuleye bakan (X 250), uzak uç (X 810), uzun yanlar (Y ±210)
-WZ0, WZ1 = 105.0, 190.0
-# Kuleye bakan duvar kapalı: evin ve fenerin girişleri ayrı
-wall_x(HX0, -1, [])
-wall_x(HX1, 1, [(-60 - 38, -60 + 38, WZ0, WZ1)])
-wall_y(-HY, -1, HX0, HX1, [(604, 716, 0, 222), (362, 438, WZ0, WZ1)])
-wall_y(HY, 1, HX0, HX1, [(652, 728, WZ0, WZ1), (360, 436, WZ0, WZ1)])
-window(400, -HY, WZ0, WZ1, 76, 'X')
-window(690, HY, WZ0, WZ1, 76, 'X')
-window(398, HY, WZ0, WZ1, 76, 'X')
-window(-60, HX1, WZ0, WZ1, 76, 'Y')
-# Dış kapı (-Y, X 660): söve, yarı açık kanat (içe), taş eşik
-for xx in (598, 716):
-    P.append(box("dside", (xx, -HY - 5, 0), (xx + 6, -HY + 2, 228), WORN, 0.8))
-P.append(box("dtop", (598, -HY - 6, 222), (722, -HY + 2, 232), WORN, 0.8))
-leaf = box("dleaf", (0, -2, 0), (108, 2, 214), WOOD, 0.6)
-leaf.location = to_bl(606 + 54 * math.cos(math.radians(70)), -HY + WT + 54 * math.sin(math.radians(70)), 108)
-leaf.rotation_euler = (0, 0, math.radians(-70))
-P.append(leaf)
-for k in range(3):
-    P.append(box("step%d" % k, (592 - k * 6, -HY - 34 - k * 30, -15 * (k + 1) - 20), (728 + k * 6, -HY - 2 - k * 30, -15 * k), STONE, 2.0))
-# Temel (zeminin altına iner, eğimli arazide boşluk kalmasın)
-P.append(box("found", (HX0 - 6, -HY - 6, -130), (HX1 + 6, HY + 6, 2), CONC, 1.5))
-# İç: döşeme, tavan
-P.append(box("ifloor", (HX0 + 2, -HY + WT, 0), (HX1 - WT, HY - WT, 3), WOOD))
-P.append(box("ceiling", (HX0, -HY, WH - 8), (HX1, HY, WH), WORN))
-# Çatı: metal levhalar, dikiş çıtaları, saçak
-OV, OVE = 26.0, 22.0
-span = HY + OV
-ang = math.atan2(RISE_R, HY)
-L = span / math.cos(ang) + 4
-for s in (1, -1):
-    cy = s * (span * 0.5 - 4)
-    cz = WH + RISE_R * 0.5 - OV * math.tan(ang) * 0.5 + 6
-    rf = box("roof", (HX0 - OVE, -L / 2, -2.5), (HX1 + OVE, L / 2, 2.5), ROOF, 0.5)
-    rf.location = to_bl((HX0 + HX1) / 2, cy, cz)
-    rf.rotation_euler = (math.radians(s * math.degrees(ang)), 0, 0)
-    P.append(rf)
-    for k in range(int((HX1 - HX0 + 2 * OVE) / 45) + 1):
-        x = HX0 - OVE + 10 + k * 45
-        sm = box("seam", (x - 1.5, -L / 2, 2.5), (x + 1.5, L / 2, 5.5), ROOF, 0.4)
-        sm.location = to_bl(x, cy, cz) + Vector((0, 0, 4 * C * math.cos(ang)))
-        sm.rotation_euler = (math.radians(s * math.degrees(ang)), 0, 0)
-        P.append(sm)
-P.append(cyl("ridge", (((HX0 + HX1) / 2), 0, WH + RISE_R + 7), 5, HX1 - HX0 + 2 * OVE, 'X', ROOF, seg=10))
-for s in (1, -1):
-    P.append(box("fascia", (HX0 - OVE, s * (HY + OV) - 3, WH - 22), (HX1 + OVE, s * (HY + OV) + 3, WH - 6), WORN, 0.5))
-# Baca (sırtın üstünde, uzak uçta)
-P.append(box("chimney", (700, -28, WH + 60), (756, 28, WH + RISE_R + 85), WORN, 1.5))
-P.append(box("chimneycap", (694, -34, WH + RISE_R + 85), (762, 34, WH + RISE_R + 93), CONC, 1.0))
-P.append(cyl("chimneypot", (728, 0, WH + RISE_R + 102), 9, 18, 'Z', CONC, seg=12))
-# Duvarın dibinde ıslak toprak / yosun izi gibi koyu bant
-for (a, b, c, d) in ((HX0, -HY - 1.5, HX1, -HY + 0.1), (HX0, HY - 0.1, HX1, HY + 1.5)):
-    P.append(box("grime", (a, b, 0), (c, d, 14), CONC))
+def window_x(cy, xface, s, z0, z1, w):
+    hw = w / 2.0
+    xo = sorted((xface, xface + s * 5))
+    P.append(box("wsill", (min(xface, xface + s * 9), cy - hw - 8, z0 - 7), (max(xface, xface + s * 9), cy + hw + 8, z0), CONC, 1.0))
+    P.append(box("wtrimT", (xo[0], cy - hw - 7, z1), (xo[1], cy + hw + 7, z1 + 9), PLASTER, 0.8))
+    for yy in (cy - hw - 7, cy + hw):
+        P.append(box("wtrimS", (xo[0], yy, z0), (xo[1], yy + 7, z1), PLASTER, 0.6))
+    gx = xface - s * 11
+    P.append(box("wglass", (gx - 0.5, cy - hw, z0), (gx + 0.5, cy + hw, z1), WINGLOW))
+    P.append(box("wbarV", (gx - 2.5, cy - 1.8, z0), (gx + 2.5, cy + 1.8, z1), BLACK))
+    for f in (1 / 3.0, 2 / 3.0):
+        zz = z0 + (z1 - z0) * f
+        P.append(box("wbarH", (gx - 2.5, cy - hw, zz - 1.5), (gx + 2.5, cy + hw, zz + 1.5), BLACK))
+
+
+WZ0, WZ1 = 95.0, 200.0
+# --- duvarlar
+# Kuleye bakan uç (X 250): kapalı (kule girişi ayrı)
+wall("wallTower", (HX0, -HY, -2), (HX0 + WT, HY, WH), [])
+tri_obj = tri_prism_x("gableTower", HX0, HX0 + WT, -HY, HY, WH, RISE_R, PLASTER)
+P.append(tri_obj)
+# Uzak uç (X 810): pencere + alınlıkta küçük havalandırma penceresi
+wall("wallEnd", (HX1 - WT, -HY, -2), (HX1, HY, WH), [((HX1 - WT - 5, -40, WZ0), (HX1 + 5, 40, WZ1))])
+P.append(tri_prism_x("gableEnd", HX1 - WT, HX1, -HY, HY, WH, RISE_R, PLASTER))
+window_x(0, HX1, 1, WZ0, WZ1, 80)
+# Arka (+Y): iki pencere
+wall("wallBack", (HX0, HY - WT, -2), (HX1, HY, WH), [((380 - 40, HY - WT - 5, WZ0), (380 + 40, HY + 5, WZ1)), ((680 - 40, HY - WT - 5, WZ0), (680 + 40, HY + 5, WZ1))])
+window_y(380, HY, 1, WZ0, WZ1, 80)
+window_y(680, HY, 1, WZ0, WZ1, 80)
+# Ön (-Y): kule tarafında pencere; giriş çıkıntısının arkası açık
+wall("wallFrontA", (HX0, -HY, -2), (BX0, -HY + WT, WH), [((400 - 40, -HY - 5, WZ0), (400 + 40, -HY + WT + 5, WZ1))])
+window_y(400, -HY, -1, WZ0, WZ1, 80)
+wall("wallFrontB", (BX1, -HY, -2), (HX1, -HY + WT, WH), [])
+P.append(box("frontLintel", (BX0, -HY, WH - 30), (BX1, -HY + WT, WH), PLASTER, 0.4))
+# Giriş çıkıntısı: ön duvar (kapı), yan duvarlar, üçgen alınlık
+wall("bayFront", (BX0, -BY, -2), (BX1, -BY + WT, WH), [((DOOR_X0, -BY - 5, 0), (DOOR_X1, -BY + WT + 5, DOOR_H))])
+wall("baySideA", (BX0, -BY, -2), (BX0 + WT, -HY + WT, WH), [])
+wall("baySideB", (BX1 - WT, -BY, -2), (BX1, -HY + WT, WH), [])
+P.append(tri_prism_y("bayGable", -BY, -BY + WT, BX0, BX1, WH, BRISE, PLASTER))
+# Alınlıkta yuvarlak pencere
+P.append(torus("oculusRim", ((BX0 + BX1) / 2, -BY - 1, WH + 42), 17, 3.5, PLASTER, axis='Y', majseg=24, minseg=6))
+P.append(cyl("oculus", ((BX0 + BX1) / 2, -BY + 2, WH + 42), 15, 1.0, 'Y', WINGLOW, seg=24))
+# Kapı sövesi ve üst pervaz (kanat ayrı aktör)
+for xx in (DOOR_X0 - 9, DOOR_X1):
+    P.append(box("doorTrim", (xx, -BY - 5, 0), (xx + 9, -BY + 2, DOOR_H + 9), PLASTER, 0.8))
+P.append(box("doorHead", (DOOR_X0 - 14, -BY - 8, DOOR_H + 9), (DOOR_X1 + 14, -BY + 2, DOOR_H + 20), PLASTER, 1.0))
+# Köşe pilastrları ve saçak altı kuşağı
+for (x, y) in ((HX0, -HY), (HX1 - 10, -HY), (HX1 - 10, HY - 10), (BX0, -BY), (BX1 - 10, -BY)):
+    P.append(box("corner", (x - 2, y - 2, 0), (x + 12, y + 12, WH), PLASTER, 0.8))
+for (lo, hi) in (((HX0, -HY - 4, WH - 14), (HX1, -HY + 2, WH)), ((HX0, HY - 2, WH - 14), (HX1, HY + 4, WH)), ((BX0, -BY - 4, WH - 14), (BX1, -BY + 2, WH))):
+    P.append(box("cornice", lo, hi, PLASTER, 0.8))
+
+# --- çatı: ana çatı (sırt X boyunca) ve giriş alınlığının çatısı (sırt Y boyunca)
+OV, OVE, TH = 28.0, 26.0, 5.0
+slope = RISE_R / HY
+zl = WH - OV * slope
+for s in (-1, 1):
+    y_eave = s * (HY + OV)
+    P.append(roof_plane("roof%d" % s, (HX0 - OVE, y_eave, zl), (HX1 + OVE, y_eave, zl), (HX1 + OVE, 0, WH + RISE_R), (HX0 - OVE, 0, WH + RISE_R), TH, ROOF))
+    # Dikiş çıtaları
+    for k in range(int((HX1 - HX0 + 2 * OVE) / 42) + 1):
+        x = HX0 - OVE + 12 + k * 42
+        P.append(beam("seam", (x, y_eave, zl + TH + 1.2), (x, 0, WH + RISE_R + TH + 1.2), 2.2, 2.4, ROOF))
+    P.append(box("fascia", (HX0 - OVE, min(y_eave, y_eave - s * 4), zl - 14), (HX1 + OVE, max(y_eave, y_eave - s * 4), zl + 2), PLASTER, 0.6))
+P.append(cyl("ridge", ((HX0 + HX1) / 2, 0, WH + RISE_R + TH + 3), 5.5, HX1 - HX0 + 2 * OVE, 'X', ROOF, seg=10))
+# Uçlarda saçak tahtaları (alınlık kenarı)
+for x in (HX0 - OVE, HX1 + OVE - 6):
+    for s in (-1, 1):
+        P.append(beam("barge", (x + 3, s * (HY + OV), zl - 2), (x + 3, 0, WH + RISE_R - 2), 6, 16, PLASTER, 0.5))
+# Giriş alınlığının çatısı: iki eğim, sırtı ana çatıya kadar uzanır
+bslope = BRISE / ((BX1 - BX0) / 2)
+bov = 22.0
+ytip = -55.0
+for s in (-1, 1):
+    x_e = (BX0 - bov) if s < 0 else (BX1 + bov)
+    zle = WH - bov * bslope
+    P.append(roof_plane("bayroof%d" % s, (x_e, -BY - bov, zle), ((BX0 + BX1) / 2, -BY - bov, WH + BRISE), ((BX0 + BX1) / 2, ytip, WH + BRISE), (x_e, ytip, zle), TH, ROOF))
+    P.append(beam("bayBarge", (x_e, -BY - bov - 3, zle - 2), ((BX0 + BX1) / 2, -BY - bov - 3, WH + BRISE - 2), 6, 16, PLASTER, 0.5))
+P.append(cyl("bayRidge", ((BX0 + BX1) / 2, (-BY - bov + ytip) / 2, WH + BRISE + TH + 3), 5, (BY + bov) + ytip, 'Y', ROOF, seg=10))
+# Baca: kule tarafında, sırtın arkasında
+P.append(box("chimney", (300, 20, WH + 40), (356, 76, WH + RISE_R + 75), PLASTER, 1.5))
+P.append(box("chimneyCap", (294, 14, WH + RISE_R + 75), (362, 82, WH + RISE_R + 84), CONC, 1.0))
+for dx in (12, 32):
+    P.append(cyl("chimneyPot", (300 + dx + 6, 48, WH + RISE_R + 96), 8, 24, 'Z', CONC, seg=12))
+
+# --- taş temel (görünen gri kaide, zemine iner), giriş basamakları, iç döşeme ve tavan
+P.append(box("found", (HX0 - 8, -HY - 8, -260), (HX1 + 8, HY + 8, 4), STONE, 2.0))
+P.append(box("foundBay", (BX0 - 8, -BY - 8, -260), (BX1 + 8, -HY, 4), STONE, 2.0))
+for k in range(4):
+    P.append(box("step%d" % k, (DOOR_X0 - 20 - k * 8, -BY - 36 - k * 32, -14 * (k + 1) - 40), (DOOR_X1 + 20 + k * 8, -BY - 4 - k * 32, -14 * k), STONE, 2.0))
+P.append(box("ifloor", (HX0 + WT, -HY + WT, 0), (HX1 - WT, HY - WT, 4), WOOD))
+P.append(box("ifloorBay", (BX0 + WT, -BY + WT, 0), (BX1 - WT, -HY + WT, 4), WOOD))
+P.append(box("ceiling", (HX0, -HY, WH - 10), (HX1, HY, WH - 4), PLASTER))
+P.append(box("ceilingBay", (BX0, -BY, WH - 10), (BX1, -HY, WH - 4), PLASTER))
+# Duvar dibi süpürgelik (içeride)
+for (lo, hi) in (((HX0 + WT, -HY + WT, 4), (HX1 - WT, -HY + WT + 2, 16)), ((HX0 + WT, HY - WT - 2, 4), (HX1 - WT, HY - WT, 16))):
+    P.append(box("skirting", lo, hi, WOOD))
 house = join("SM_NL_LH_House", P, uv_size=1.0)
 export(house, OUT)
+
+# --- kapı kanatları (ANLSwingDoor): orijin = menteşe altı, kanat +X'e uzanır (kapalı), kalınlık Y'de ortalı
+P = []
+P.append(box("leaf", (0, -2.5, 0), (106, 2.5, 212), WOOD, 0.6))
+for z in (40.0, 106.0, 172.0):
+    P.append(box("ledge", (6, -3.5, z - 7), (100, -2.5, z + 7), WOOD, 0.4))
+    P.append(box("ledgeB", (6, 2.5, z - 7), (100, 3.5, z + 7), WOOD, 0.4))
+for z in (35.0, 175.0):
+    P.append(box("hinge", (-2, -3.8, z - 3), (40, 3.8, z + 3), BLACK, 0.3))
+P.append(cyl("knob", (94, -6, 100), 3, 6, 'Y', BLACK, seg=12))
+P.append(cyl("knobB", (94, 6, 100), 3, 6, 'Y', BLACK, seg=12))
+dh = join("SM_NL_LH_DoorHouse", P, uv_size=0.5)
+export(dh, OUT)
+P = []
+P.append(box("leaf", (0, -3, 0), (116, 3, 213), WOOD, 0.6))
+for x in (8.0, 38.0, 68.0, 98.0):
+    P.append(box("plank", (x - 0.6, -3.6, 0), (x + 0.6, 3.6, 213), BLACK))
+for z in (30.0, 180.0):
+    P.append(box("strap", (-2, -4.2, z - 4), (100, 4.2, z + 4), BLACK, 0.4))
+    for x in (20.0, 50.0, 80.0):
+        P.append(cyl("rivet", (x, -4.6, z), 1.2, 1.2, 'Y', BLACK, seg=6, smooth=False))
+P.append(torus("ring", (104, -6.5, 104), 5, 1, BLACK, axis='Y', majseg=12, minseg=6))
+dt = join("SM_NL_LH_DoorTower", P, uv_size=0.5)
+export(dt, OUT)
 
 if os.environ.get("NL_PREVIEW") == "1":
     gal.location = to_bl(0, 0, 1000)
     lr.location = to_bl(0, 0, 1014)
     house.location = to_bl(0, 0, 40)
+    dh.location = to_bl(500, -900, 0)
+    dt.location = to_bl(500, -900, 0)
     preview(OUT, "lighthouse_preview.png", (1350, -1900, 650), (300, 0, 520),
             {WORN: (0.82, 0.8, 0.75, 1), BLACK: (0.06, 0.06, 0.07, 1), GLASS: (0.35, 0.45, 0.5, 1), STONE: (0.4, 0.4, 0.38, 1),
              ROOF: (0.45, 0.47, 0.5, 1), WOOD: (0.35, 0.25, 0.15, 1), WINGLOW: (1.0, 0.75, 0.4, 1), CONC: (0.35, 0.35, 0.34, 1)},

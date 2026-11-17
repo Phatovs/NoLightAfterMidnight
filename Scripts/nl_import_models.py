@@ -22,7 +22,12 @@ MODELS = [
     ("SM_NL_OldGenerator", True),
     ("SM_NL_Trawler", False),
     ("SM_NL_TrawlerWheel", False),
+    ("SM_NL_LH_Tower", True),
+    ("SM_NL_LH_Gallery", True),
+    ("SM_NL_LH_LanternRoom", True),
+    ("SM_NL_LH_House", True),
 ]
+COMPLEX = ("SM_NL_LH_Tower", "SM_NL_LH_Gallery", "SM_NL_LH_LanternRoom", "SM_NL_LH_House")
 only = [s.strip() for s in os.environ.get("NL_MODELS", "").split(",") if s.strip()]
 
 
@@ -76,6 +81,9 @@ def import_mesh(name, collision):
     mesh.set_editor_property("static_materials", slots)
     if not collision:
         unreal.EditorStaticMeshLibrary.remove_collisions(mesh)
+    if name in COMPLEX:
+        # İçine girilen kule: çarpışma mesh'in kendi şekli (kapı ve iç oda açık)
+        mesh.get_editor_property("body_setup").set_editor_property("collision_trace_flag", unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
     eal.save_loaded_asset(mesh)
     b = mesh.get_bounding_box()
     log("%s: min(%.0f, %.0f, %.0f) max(%.0f, %.0f, %.0f) slots=%d" % (name, b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z, len(slots)))
@@ -87,7 +95,7 @@ for n, c in MODELS:
     import_mesh(n, c)
 
 # Adadaki jeneratör -> eski tip model
-if not only or "SM_NL_OldGenerator" in only:
+if (not only or "SM_NL_OldGenerator" in only) and os.environ.get("NL_SKIP_LEVEL") != "1":
     les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
     sub = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
     gen_mesh = unreal.load_asset(DEST + "/SM_NL_OldGenerator")

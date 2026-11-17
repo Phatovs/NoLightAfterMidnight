@@ -364,6 +364,7 @@ Ortak yardımcılar `Scripts/blender_nl_common.py`. Hepsi `Saved/NLProps` klasö
 - `blender_trawler.py`: SM_NL_Trawler (balıkçı teknesi, +X pruva, güverte Z 80) + SM_NL_TrawlerWheel (dümen, X ekseninde döner)
 - `blender_old_generator.py`: SM_NL_OldGenerator (açık motorlu eski jeneratör, palet üstünde; kontrol kutusunda durum lambası MI_NL_GenLamp)
 - `blender_props.py`: SM_NL_JerryCan (yeşil 20 L), SM_NL_GuidePost (taş kaideli direk), SM_NL_GuideLantern (asılı fener), SM_NL_LanternFlame (mum alevi)
+- `blender_lighthouse.py`: SM_NL_LH_Tower (içi boş kule, merkez sütunlu döner merdiven), SM_NL_LH_Gallery (balkon r270 = fener odası zemini, merdiven boşluğu 48..275 derece), SM_NL_LH_LanternRoom (içine girilen fener odası r150, +X kapıdan balkona), SM_NL_LH_House (bitişik sıvalı bekçi evi; kontrol masası ve şarj istasyonu içinde). Ev ve kule girişleri ayrı: kulenin kendi dış kapısı 300 derecede (DOOR_A), ev ile kule arasındaki duvar kapalı. İçe aktarma: `NL_MODELS=SM_NL_LH_Tower,SM_NL_LH_Gallery,SM_NL_LH_LanternRoom,SM_NL_LH_House`, ardından `nl_lighthouse_house.py` (eski kütük kulübeleri ve eski modelleri siler). Ölçüler oyuncu kapsülüne göre (r40): fener odasında lens ile cam arası ve balkon yürünebilir. Test: `NLDebugClimb` (merdivenden tepeye çıkar, fener odası ve balkon kareleri).
 
 Sonra `nl_env_materials.py` ve `nl_import_models.py` (içe aktarır, adadaki jeneratörü SM_NL_OldGenerator'a geçirir; `NL_MODELS=SM_NL_Trawler,...` ile sadece seçilenler).
 

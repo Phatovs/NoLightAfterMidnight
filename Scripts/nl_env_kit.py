@@ -331,7 +331,7 @@ def make_stump():
 
 
 _skip_old = os.environ.get("NL_KIT_ONLY_NEW") == "1"
-for fn in (make_log, make_board, make_shingle_row, make_deck_panel, make_pane, make_lantern, make_stovepipe,
+for fn in (make_log, make_board, make_shingle_row, make_deck_panel, make_pane, make_stovepipe,
            make_post, make_barrel, make_crate, make_rope_coil, make_lantern_post, make_stump):
     if _skip_old:
         break
@@ -477,7 +477,7 @@ def make_sign():
 
 
 _only = [s.strip() for s in os.environ.get("NL_KIT", "").split(",") if s.strip()]
-for fn in (make_lh_tower, make_lh_base, make_lh_gallery, make_lh_lantern_room, make_lh_lens, make_lh_beam, make_dust, make_sign):
+for fn in (make_lh_base, make_lh_lens, make_lh_beam, make_dust, make_sign):  # kule, balkon, fener odası: Scripts/blender_lighthouse.py
     if _only and fn.__name__ not in _only:
         continue
     try:
@@ -723,7 +723,7 @@ def make_flashlight():
     save(m, "SM_NL_Flashlight", ["MI_NL_Metal", "MI_NL_LH_Glass"])
 
 
-for fn in (make_boat, make_outboard, make_oar, make_desk, make_crt, make_chair, make_flashlight):  # bidon artık Scripts/blender_props.py
+for fn in (make_desk, make_crt, make_chair, make_flashlight):  # bidon artık Scripts/blender_props.py
     if _only and fn.__name__ not in _only:
         continue
     try:

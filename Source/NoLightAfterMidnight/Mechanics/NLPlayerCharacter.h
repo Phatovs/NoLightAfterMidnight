@@ -175,6 +175,8 @@ public:
 	UFUNCTION(Exec) void NLDebugPerf();
 	// Jeneratör modeli: dışarıdan görünüm, benzin ağzı yakın plan, arıza (kırmızı lamba)
 	UFUNCTION(Exec) void NLDebugGenShots();
+	// Deniz feneri: oyuncuyu döner merdivenden gerçekten yürüterek tepeye çıkarır, fener odası ve balkondan kareler
+	UFUNCTION(Exec) void NLDebugClimb();
 
 	// Sinematik (açılış): arayüz gizli, oyuncu kontrolü kapalı
 	void SetCinematicMode(bool bOn);

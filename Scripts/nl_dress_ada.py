@@ -276,22 +276,8 @@ if lh:
     floor_z = desk.get_actor_location().z if desk else 502.0
     kc = V(282.0, -2012.0, floor_z + 4.0)   # döşeme arazinin en yüksek noktasının üstünde kalsın (titreme)
     kw, kd = 540.0, 420.0
-    keeper = eas.spawn_actor_from_class(unreal.NLLogCabin, kc, rot())
-    keeper.set_actor_label("NL_ENV_KeeperCabin")
-    keeper.set_editor_property("width", kw)
-    keeper.set_editor_property("depth", kd)
-    keeper.set_editor_property("wall_height", 262.0)
-    keeper.set_editor_property("foundation_depth", 45.0)
-    keeper.set_editor_property("seed", 31)
-    keeper.set_editor_property("chimney_pos", unreal.Vector2D(-0.5, 0.5))
-    keeper.set_editor_property("openings", [
-        opening(W.BACK, -120.0, 112.0, 215.0, door_panel=False, lantern=-1),
-        opening(W.RIGHT, 0.0, 120.0, 215.0, door_panel=False, lantern=0),
-        opening(W.LEFT, 60.0, 70.0, 80.0, 105.0, window=True, lit=True),
-        opening(W.FRONT, -150.0, 70.0, 80.0, 105.0, window=True, lit=True),
-        opening(W.BACK, 140.0, 70.0, 80.0, 105.0, window=True, lit=False),
-    ])
-    keeper.rebuild_now()
+    # Bekçi evi artık deniz fenerinin parçası (ANLLighthouse HouseMesh, Scripts/blender_lighthouse.py): ayrı kulübe kurulmaz
+    destroy(by_label("NL_ENV_KeeperCabin"))
     height = max(700.0, lamp_z - (floor_z - 40.0) - 174.0)
     tx = kc.x + kw * 0.5 + 15.0 + 255.0
     lh.set_actor_location_and_rotation(V(tx, kc.y, floor_z - 40.0 * height / 1000.0), rot(yaw=180.0), False, False)

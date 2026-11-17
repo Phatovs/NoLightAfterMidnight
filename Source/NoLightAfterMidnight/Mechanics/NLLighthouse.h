@@ -1,6 +1,7 @@
 // NoLightAfterMidnight - Deniz feneri
-// Taş kaide, yukarı daralan beyaz/kırmızı bantlı kule, açık kapılı zemin katı (içinde asılı lamba, sandık, varil),
-// küçük pencereler, korkuluklu balkon, camlı fener odası ve kubbe.
+// Model: Scripts/blender_lighthouse.py. Taş kaide, yıpranmış beyaz kule (içi tepeye kadar boş, döner merdiven),
+// korkuluklu balkon, içine girilen camlı fener odası (lensin yanında durulur, kapıdan balkona çıkılır) ve kubbe.
+// Kuleye bitişik bekçi evi (HouseMesh): sıvalı duvarlar, metal çatı, baca; kontrol masası vb. içinde durur.
 // Tepede dönen iki ışık huzmesi: denize vurur, sisin içinde görünür, uzaktan yön gösterir.
 // Elektrik kesilince (jeneratör/şalter) fener ve iç lamba söner, elektrik gelince yeniden yanar.
 // bBuildTower=false: sadece dönen ışık (başka bir kule modelinin tepesine konur).
@@ -39,6 +40,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "NL|Lighthouse") bool bInteriorProps = false;
 	// Açık kapı kanadı, kasa ve basamak (kule bir binaya bitişikse kapatılır: kapı boşluğu binaya açılır)
 	UPROPERTY(EditAnywhere, Category = "NL|Lighthouse") bool bDoorPanel = true;
+	// Kuleye bitişik bekçi evi (+X yönünde, zemini kulenin zemin katıyla aynı hizada)
+	UPROPERTY(EditAnywhere, Category = "NL|Lighthouse") bool bBuildHouse = true;
+	UPROPERTY(EditAnywhere, Category = "NL|Lighthouse") float HouseLampIntensity = 7.f;
 
 	// --- Işık ---
 	// Bir tam dönüş süresi (sn)
@@ -83,10 +87,13 @@ protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USpotLightComponent> SpotA;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USpotLightComponent> SpotB;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> RoomLight;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> HouseMesh;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> HouseLight;
 
 private:
 	UPROPERTY(Transient) TArray<TObjectPtr<UMaterialInstanceDynamic>> BeamMIDs;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> LensMID;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> HouseGlassMID;
 	float LitAlpha = 1.f;
 	// Eski lamba: ara ara tekler (oyunda ve menüde)
 	FNLLightStutter Stutter;

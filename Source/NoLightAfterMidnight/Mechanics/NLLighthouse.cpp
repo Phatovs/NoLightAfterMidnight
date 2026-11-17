@@ -13,7 +13,7 @@ namespace NLLH
 	// Kit meshinin ölçüleri (Scripts/nl_env_kit.py)
 	constexpr float MeshBaseR = 260.f, MeshTopR = 170.f, MeshH = 1000.f;
 	constexpr float RoomBottom = 40.f, RoomTop = 330.f;
-	constexpr float GalleryR = 232.f, LanternWall = 70.f, GlassH = 180.f;
+	constexpr float GalleryR = 270.f, LanternWall = 70.f, GlassH = 180.f;
 }
 
 ANLLighthouse::ANLLighthouse()
@@ -40,6 +40,8 @@ ANLLighthouse::ANLLighthouse()
 	NL_KIT_MESH(Gallery, "SM_NL_LH_Gallery");
 	NL_KIT_MESH(LanternRoom, "SM_NL_LH_LanternRoom");
 	NL_KIT_MESH(InteriorLantern, "SM_NL_GuideLantern");
+	HouseMesh = SM(TEXT("House"), true);
+	NL_KIT_MESH(HouseMesh, "SM_NL_LH_House");
 
 	Boards = MakeISM(this, Root, TEXT("Boards"), true);
 	Windows = MakeISM(this, Root, TEXT("Windows"), false);
@@ -108,6 +110,8 @@ ANLLighthouse::ANLLighthouse()
 	InteriorLight = Point(TEXT("InteriorLight"), Root);
 	InteriorLight->SetCastShadows(true);   // oda küçük; tek gölgeli lamba
 	InteriorLight->SetLightColor(FLinearColor(1.f, 0.62f, 0.3f));
+	HouseLight = Point(TEXT("HouseLight"), Root);
+	HouseLight->SetLightColor(FLinearColor(1.f, 0.66f, 0.36f));
 }
 
 float ANLLighthouse::RadiusAt(float Z) const
@@ -131,7 +135,13 @@ void ANLLighthouse::Layout()
 	const float Sz = TowerHeight / MeshH;
 	const float H = bBuildTower ? TowerHeight : 0.f;
 
-	for (UStaticMeshComponent* C : { Base.Get(), Tower.Get(), Gallery.Get(), LanternRoom.Get(), InteriorLantern.Get() }) C->SetVisibility(bBuildTower);
+	for (UStaticMeshComponent* C : { Base.Get(), Tower.Get(), Gallery.Get(), LanternRoom.Get() }) C->SetVisibility(bBuildTower);
+	// Kulenin içi merdivenli boş gövde: asılı fener yok, lamba gövdenin ortasında
+	InteriorLantern->SetVisibility(false);
+	const bool bHouse = bBuildTower && bBuildHouse;
+	HouseMesh->SetVisibility(bHouse);
+	HouseMesh->SetCollisionEnabled(bHouse ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
+	HouseLight->SetVisibility(bHouse);
 	for (UStaticMeshComponent* C : { Base.Get(), Tower.Get(), Gallery.Get(), LanternRoom.Get() }) C->SetCollisionEnabled(bBuildTower ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
 	Boards->ClearInstances();
 	Windows->ClearInstances();
@@ -148,7 +158,8 @@ void ANLLighthouse::Layout()
 	Tower->SetRelativeScale3D(FVector(Sxy, Sxy, Sz));
 	Base->SetRelativeScale3D(FVector(Sxy, Sxy, 0.75f));
 	Gallery->SetRelativeLocation(FVector(0, 0, H));
-	Gallery->SetRelativeScale3D(FVector((TopR + 55.f) / GalleryR, (TopR + 55.f) / GalleryR, 1.f));
+	// Balkon ölçeklenmez: üstünde yürünür (genişlik oyuncuya göre)
+	Gallery->SetRelativeScale3D(FVector::OneVector);
 	LanternRoom->SetRelativeLocation(FVector(0, 0, H + 14.f));
 	LanternRoom->SetRelativeScale3D(FVector(Sxy, Sxy, 1.f));
 	const float RotorZ = bBuildTower ? H + 14.f + LanternWall + GlassH * 0.5f : 0.f;
@@ -178,13 +189,21 @@ void ANLLighthouse::Layout()
 	InteriorLight->SetVisibility(bBuildTower);
 	if (!bBuildTower) return;
 
+	// Bekçi evi: kulenin +X yanında, zemini kulenin zemin katıyla aynı hizada (ölçeklenmez)
+	HouseMesh->SetRelativeLocationAndRotation(FVector(0.f, 0.f, RoomBottom * Sz), FRotator::ZeroRotator);
+	HouseMesh->SetRelativeScale3D(FVector::OneVector);
+	HouseLight->SetRelativeLocation(FVector(530.f, 0.f, RoomBottom * Sz + 236.f));
+	HouseLight->SetIntensity(HouseLampIntensity);
+	HouseLight->SetAttenuationRadius(800.f);
+
 	// Zemin katı: tavandan sarkan fener + lamba
 	InteriorLantern->SetRelativeLocation(FVector(0, 0, CeilingZ - 4.f));
-	InteriorLight->SetRelativeLocation(FVector(0, 0, CeilingZ - 40.f));
+	// Merdiven boşluğunun ortasında, duvara yakın (merkez sütunun gölgesi az düşsün)
+	InteriorLight->SetRelativeLocation(FVector(-120.f, 0.f, 560.f * Sz));
 	InteriorLight->SetIntensity(InteriorLampIntensity);
 	InteriorLight->SetAttenuationRadius(900.f);
 
-	if (bDoorPanel)
+	if (bDoorPanel && !bHouse)
 	{
 	// Açık kapı (+X): kanat dışarı doğru açılmış
 	const float DoorR = RadiusAt(RoomBottom * Sz + 100.f);
@@ -246,6 +265,11 @@ void ANLLighthouse::BeginPlay()
 		}
 	}
 	LensMID = Lens->CreateAndSetMaterialInstanceDynamic(0);
+	if (HouseMesh)
+	{
+		const int32 G = HouseMesh->GetMaterialIndex(TEXT("MI_NL_WindowGlow"));
+		if (G != INDEX_NONE) HouseGlassMID = HouseMesh->CreateDynamicMaterialInstance(G);
+	}
 	Stutter.Interval = FVector2D(14.f, 35.f);
 	ApplyLit(1.f);
 }
@@ -258,6 +282,8 @@ void ANLLighthouse::ApplyLit(float InAlpha)
 	SpotB->SetIntensity(BeamIntensity * Alpha);
 	RoomLight->SetIntensity(15.f * Alpha);
 	if (bBuildTower) InteriorLight->SetIntensity(InteriorLampIntensity * Alpha);
+	if (bBuildTower && bBuildHouse) HouseLight->SetIntensity(HouseLampIntensity * Alpha);
+	if (HouseGlassMID) HouseGlassMID->SetScalarParameterValue(TEXT("Intensity"), 0.24f * Alpha + 0.005f);
 	for (UMaterialInstanceDynamic* M : BeamMIDs) if (M) M->SetScalarParameterValue(TEXT("Intensity"), BeamGlow * Alpha);
 	if (LensMID) LensMID->SetScalarParameterValue(TEXT("Intensity"), 2.5f * Alpha + 0.02f);
 	const bool bOn = Alpha > 0.001f;

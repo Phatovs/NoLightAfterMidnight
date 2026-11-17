@@ -512,6 +512,10 @@ instance("MI_NL_LighthousePaint", lh)
 instance("MI_NL_Beam", beam)
 instance("MI_NL_LH_Metal", surf, {"BaseTex": "T_NL_Metal_C", "NormalTex": "T_NL_Metal_N"}, {"Roughness": 0.45, "UVScale": 2.0}, {"Tint": (0.75, 0.25, 0.22)})
 instance("MI_NL_LH_Glass", glow, scalars={"Intensity": 0.05, "Roughness": 0.03}, vectors={"Base": (0.02, 0.022, 0.025), "Color": (1.0, 0.7, 0.4)})
+# Deniz feneri (Scripts/blender_lighthouse.py): pas lekeli yıpranmış beyaz kule, siyah balkon ve fener odası
+surf_mi("MI_NL_LH_Worn", "Metal", 0.6, (3.4, 3.35, 3.15), uv=0.45)
+surf_mi("MI_NL_LH_Black", "Metal", 0.5, (0.17, 0.18, 0.19), uv=1.5)
+surf_mi("MI_NL_LH_RoofMetal", "Metal", 0.45, (1.0, 1.05, 1.12), uv=1.0)
 instance("MI_NL_LensGlow", glow, scalars={"Intensity": 2.5, "Roughness": 0.1}, vectors={"Base": (0.3, 0.28, 0.24), "Color": (1.0, 0.74, 0.4)})
 
 with open(os.path.join(unreal.Paths.project_saved_dir(), "NLMaterials.log"), "w", encoding="utf-8") as f:

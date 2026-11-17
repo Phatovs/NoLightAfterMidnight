@@ -3092,3 +3092,110 @@ void ANLPlayerCharacter::NLDebugGenShots()
 	At(6.4f, [Shot]() { Shot(TEXT("radiator end")); });
 	At(7.0f, [this]() { if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("quit")); });
 }
+
+void ANLPlayerCharacter::NLDebugClimb()
+{
+	ANLLighthouse* LH = nullptr;
+	for (TActorIterator<ANLLighthouse> It(GetWorld()); It; ++It) { LH = *It; break; }
+	if (!LH) return;
+	const FTransform X = LH->GetActorTransform();
+	const float HH = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	const float Sz = 1.f;   // aktörün kendi ölçeği; kule ölçeği yerel Z'de
+	// Merdiven başı: zemin katında, ilk basamağın önü
+	// Kulenin dış kapısının önünden başla (kapı 300 derecede, evin girişinden ayrı)
+	const float A0 = FMath::DegreesToRadians(300.f);
+	FVector Start = X.TransformPosition(FVector(FMath::Cos(A0) * 400.f, FMath::Sin(A0) * 400.f, 0.f));
+	FHitResult Hit;
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(NLClimb), false, this);
+	if (GetWorld()->LineTraceSingleByChannel(Hit, Start + FVector(0, 0, 200.f), Start - FVector(0, 0, 300.f), ECC_Visibility, Q)) Start.Z = Hit.ImpactPoint.Z;
+	SetActorLocation(Start + FVector(0, 0, HH + 2.f), false, nullptr, ETeleportType::TeleportPhysics);
+	if (!Flashlight->IsOn()) Flashlight->Toggle();
+	UE_LOG(LogTemp, Log, TEXT("NLClimb: start at z %.0f (lighthouse z %.0f), capsule r %.0f hh %.0f"), GetActorLocation().Z, X.GetLocation().Z, GetCapsuleComponent()->GetScaledCapsuleRadius(), HH);
+
+	struct FState { float T = 0.f; float LastZ = 0.f; float StuckT = 0.f; int32 Phase = -1; int32 Shots = 0; };
+	TSharedRef<FState> S = MakeShared<FState>();
+	S->LastZ = GetActorLocation().Z;
+	static FTimerHandle H;
+	GetWorldTimerManager().SetTimer(H, FTimerDelegate::CreateWeakLambda(this, [this, X, S, HH]()
+	{
+		const float Dt = 0.02f;
+		S->T += Dt;
+		const FVector L = X.InverseTransformPosition(GetActorLocation());
+		const float A = FMath::Atan2(L.Y, L.X);
+		const float R = FVector2D(L.X, L.Y).Size();
+		auto Shot = [this, S](const TCHAR* Name) { UE_LOG(LogTemp, Log, TEXT("NLClimb: shot %s"), Name); if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("shot")); };
+		if (S->Phase == -1)
+		{
+			// Kapıdan içeri yürü
+			const float DA = FMath::DegreesToRadians(300.f);
+			const FVector Goal(FMath::Cos(DA) * 120.f, FMath::Sin(DA) * 120.f, L.Z);
+			const FVector D = (Goal - L).GetSafeNormal2D();
+			AddMovementInput(X.TransformVectorNoScale(D), 1.f);
+			if (Controller) Controller->SetControlRotation(FRotator(-5.f, X.TransformVectorNoScale(D).Rotation().Yaw, 0.f));
+			if (S->Shots == 0 && S->T > 0.3f) { S->Shots = -1; Shot(TEXT("tower door from outside")); }
+			if (R < 150.f) { UE_LOG(LogTemp, Log, TEXT("NLClimb: entered the tower through its own door at t=%.1f s"), S->T); S->Phase = 0; S->T = 0.f; S->Shots = 0; S->LastZ = GetActorLocation().Z; }
+			else if (S->T > 12.f) { UE_LOG(LogTemp, Warning, TEXT("NLClimb: could not enter the tower (r %.0f)"), R); Shot(TEXT("stuck at door")); S->Phase = 9; S->T = 0.f; }
+		}
+		else if (S->Phase == 0)
+		{
+			// Merdiveni saat yönünün tersine tırman (yarıçap ~105)
+			const FVector Tan(-FMath::Sin(A), FMath::Cos(A), 0.f);
+			const FVector Rad(FMath::Cos(A), FMath::Sin(A), 0.f);
+			const FVector Dir = (Tan + Rad * FMath::Clamp((92.f - R) * 0.02f, -0.5f, 0.5f)).GetSafeNormal();
+			const FVector W = X.TransformVectorNoScale(Dir);
+			AddMovementInput(W, 1.f);
+			if (Controller) Controller->SetControlRotation(FRotator(18.f, W.Rotation().Yaw, 0.f));
+			if (FMath::Fmod(S->T, 1.f) < Dt) UE_LOG(LogTemp, Log, TEXT("NLClimb: t=%.0f z=%.0f (local %.0f) angle=%.0f r=%.0f"), S->T, GetActorLocation().Z, L.Z, FMath::RadiansToDegrees(A), R);
+			if (S->Shots == 0 && L.Z > 450.f) { S->Shots = 1; Shot(TEXT("on the stairs")); }
+			// Takıldı mı
+			if (GetActorLocation().Z > S->LastZ + 5.f) { S->LastZ = GetActorLocation().Z; S->StuckT = 0.f; }
+			else S->StuckT += Dt;
+			if (L.Z > 1000.f + HH)
+			{
+				UE_LOG(LogTemp, Log, TEXT("NLClimb: reached the lantern room at t=%.1f s (local z %.0f)"), S->T, L.Z);
+				S->Phase = 1; S->T = 0.f;
+			}
+			else if (S->StuckT > 4.f || S->T > 90.f)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("NLClimb: STUCK at local z %.0f angle %.0f r %.0f"), L.Z, FMath::RadiansToDegrees(A), R);
+				Shot(TEXT("stuck"));
+				S->Phase = 9; S->T = 0.f;
+			}
+		}
+		else if (S->Phase == 1)
+		{
+			// Merdiven boşluğundan çık: zemindeki açık tarafa (330 derece) yürü, lense bak
+			const FVector Goal(FMath::Cos(FMath::DegreesToRadians(320.f)) * 88.f, FMath::Sin(FMath::DegreesToRadians(320.f)) * 88.f, L.Z);
+			const FVector D = (Goal - L).GetSafeNormal2D();
+			if ((Goal - L).Size2D() > 15.f && S->T < 4.f) AddMovementInput(X.TransformVectorNoScale(D), 1.f);
+			const FVector LensW = X.TransformPosition(FVector(0, 0, L.Z + 60.f));
+			if (Controller) Controller->SetControlRotation((LensW - FirstPersonCamera->GetComponentLocation()).Rotation());
+			if (S->T > 4.5f) { Shot(TEXT("lantern room, next to the lens")); S->Phase = 2; S->T = 0.f; }
+		}
+		else if (S->Phase == 2)
+		{
+			// Kapıdan (+X) balkona çık, sonra balkonda yürü
+			const FVector Goal = S->T < 2.5f ? FVector(105.f, 0.f, L.Z) : (S->T < 4.5f ? FVector(212.f, 0.f, L.Z) : FVector(FMath::Cos(0.9f) * 212.f, FMath::Sin(0.9f) * 212.f, L.Z));
+			const FVector D = (Goal - L).GetSafeNormal2D();
+			if ((Goal - L).Size2D() > 12.f) AddMovementInput(X.TransformVectorNoScale(D), 1.f);
+			if (Controller) Controller->SetControlRotation(FRotator(-6.f, X.TransformVectorNoScale(D).Rotation().Yaw, 0.f));
+			if (S->T > 7.f)
+			{
+				UE_LOG(LogTemp, Log, TEXT("NLClimb: on the gallery at local (%.0f, %.0f, %.0f) r=%.0f"), L.X, L.Y, L.Z, R);
+				Shot(TEXT("gallery"));
+				S->Phase = 3; S->T = 0.f;
+			}
+		}
+		else if (S->Phase == 3)
+		{
+			// Balkondan fener odasına geri bak
+			const FVector LensW = X.TransformPosition(FVector(0, 0, L.Z + 40.f));
+			if (Controller) Controller->SetControlRotation((LensW - FirstPersonCamera->GetComponentLocation()).Rotation());
+			if (S->T > 1.f) { Shot(TEXT("gallery, looking at the lantern")); S->Phase = 9; S->T = 0.f; }
+		}
+		else if (S->T > 1.5f)
+		{
+			if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ConsoleCommand(TEXT("quit"));
+		}
+	}), 0.02f, true, 1.0f);
+}

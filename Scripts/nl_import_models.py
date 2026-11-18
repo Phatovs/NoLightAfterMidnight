@@ -28,6 +28,7 @@ MODELS = [
     ("SM_NL_LH_House", True),
     ("SM_NL_LH_DoorHouse", True),
     ("SM_NL_LH_DoorTower", True),
+    ("SM_NL_Heater", True),
 ]
 COMPLEX = ("SM_NL_LH_Tower", "SM_NL_LH_Gallery", "SM_NL_LH_LanternRoom", "SM_NL_LH_House")
 only = [s.strip() for s in os.environ.get("NL_MODELS", "").split(",") if s.strip()]

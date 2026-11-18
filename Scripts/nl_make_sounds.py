@@ -729,7 +729,51 @@ def boat_step_off():
     return fade(y, 0.002, 0.2)
 
 
+def _ice_tick(amp, f, tau):
+    # Tek bir buz çıtırtısı: çok kısa tiz gürültü patlaması + kısa çınlama
+    n = int(SR * (tau * 6 + 0.004))
+    burst = apply_env(highpass(noise(n / SR), 2500), env_exp(n, 0.0012))
+    ring = apply_env(tone(n / SR, f, f * rng.uniform(0.93, 0.99)), env_exp(n, tau))
+    return [(b * 0.8 + r * 0.45) * amp for b, r in zip(burst, ring)]
+
+
+def frost_crackle_loop():
+    # Donma: camda/derinin üstünde buz tutarken gelen ince, düzensiz çıtırtılar (kümeler halinde), döngü
+    dur = 7.0
+    y = silence(dur)
+    dens = _slow_curve(int(SR * dur), 0.35, 0.15, 1.0, 5)
+    t = 0.0
+    while t < dur - 0.05:
+        d = dens[int(t * SR)]
+        t += rng.expovariate(10.0 + 50.0 * d)
+        if t >= dur - 0.05:
+            break
+        amp = rng.uniform(0.15, 1.0) ** 2 * (0.4 + 0.6 * d)
+        _mix_wrap(y, _ice_tick(amp, rng.uniform(3000, 9500), rng.uniform(0.002, 0.009)), t, 1.0)
+    # Çok hafif kırağı hışırtısı
+    hiss = apply_env(bandpass(noise(dur), 5000, 12000), [0.04 + 0.05 * v for v in dens])
+    y = [a + b for a, b in zip(y, hiss)]
+    return _loopable(y, 0.3)
+
+
+def frost_crack():
+    # Buzun çatlaması: sıkı bir çıtırtı kümesi, aşağı kayan ince "ping" ve hafif derin gerilme sesi
+    y = silence(1.2)
+    t = 0.0
+    for i in range(70):
+        t += rng.expovariate(260.0) if i < 50 else rng.expovariate(60.0)
+        amp = rng.uniform(0.3, 1.0) ** 1.5 * math.exp(-t / 0.35)
+        mix(y, _ice_tick(amp, rng.uniform(2500, 8000), rng.uniform(0.003, 0.012)), t, 1.0)
+    ping = apply_env(tone(0.9, 2400, 900), env_exp(int(SR * 0.9), 0.18))
+    mix(y, ping, 0.01, 0.22)
+    groan = apply_env(lowpass(tone(0.7, 160, 110, shape="saw"), 900), env_exp(int(SR * 0.7), 0.15))
+    mix(y, groan, 0.0, 0.18)
+    return fade(y, 0.001, 0.2)
+
+
 SOUNDS = {
+    "frost_crackle_loop": frost_crackle_loop,
+    "frost_crack": frost_crack,
     "boat_engine_loop": boat_engine_loop,
     "boat_engine_stop": boat_engine_stop,
     "boat_dock_bump": boat_dock_bump,

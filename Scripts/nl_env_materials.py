@@ -377,6 +377,9 @@ surf_mi("MI_NL_TrawlerBlue", "Metal", 0.55, (0.8, 1.6, 2.6), uv=0.7)
 surf_mi("MI_NL_TrawlerBottom", "Metal", 0.7, (0.6, 0.32, 0.18), uv=0.7)
 surf_mi("MI_NL_JerryGreen", "Metal", 0.45, (0.6, 0.78, 0.32), uv=2.0)
 instance("MI_NL_Flame", glow, scalars={"Intensity": 6.0}, vectors={"Color": (1.0, 0.55, 0.15)})
+# Elektrikli ısıtıcı (Scripts/blender_heater.py): krem emaye kasa, kızaran çubuklar (C++ ANLHeater yoğunluğu ayarlar)
+surf_mi("MI_NL_HeaterPaint", "Metal", 0.4, (2.1, 1.85, 1.4), uv=1.5)
+instance("MI_NL_HeaterGlow", glow, scalars={"Intensity": 0.0}, vectors={"Color": (1.0, 0.32, 0.06), "Base": (0.08, 0.04, 0.03)})
 # Kıyafetler manken (iskeletli mesh) üstünde kullanılır: ana malzeme iskeletli mesh desteği ister
 if not surf.get_editor_property("used_with_skeletal_mesh"):
     surf.set_editor_property("used_with_skeletal_mesh", True)

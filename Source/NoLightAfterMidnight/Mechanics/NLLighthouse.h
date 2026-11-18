@@ -43,6 +43,8 @@ public:
 	// Kuleye bitişik bekçi evi (+X yönünde, zemini kulenin zemin katıyla aynı hizada)
 	UPROPERTY(EditAnywhere, Category = "NL|Lighthouse") bool bBuildHouse = true;
 	UPROPERTY(EditAnywhere, Category = "NL|Lighthouse") float HouseLampIntensity = 7.f;
+	// Evin içine elektrikli soba (oyuncu yanında ısınır)
+	UPROPERTY(EditAnywhere, Category = "NL|Lighthouse") bool bHeater = true;
 
 	// --- Işık ---
 	// Bir tam dönüş süresi (sn)
@@ -92,6 +94,7 @@ protected:
 	UPROPERTY() TObjectPtr<class UStaticMesh> HouseDoorMesh;
 	UPROPERTY() TObjectPtr<class UStaticMesh> TowerDoorMesh;
 	UPROPERTY(Transient) TArray<TObjectPtr<class ANLSwingDoor>> Doors;
+	UPROPERTY(Transient) TObjectPtr<class ANLHeater> Heater;
 	void SpawnDoors();
 
 private:

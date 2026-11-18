@@ -370,3 +370,10 @@ Sonra `nl_env_materials.py` ve `nl_import_models.py` (içe aktarır, adadaki jen
 
 Açılış (NLIntroDirector): kaptan (sarı yağmurluk) köşkte iki eli dümende, dümen dönüşlere göre döner; yolcu (koyu mont) arka güvertede oyuncunun yanında, bir eli küpeştede. Oyuncu rıhtıma inince dönüp tekneye bakar, yolcu el sallar; sonra adaya döner (DAY 1) ve tekne motoru açıp denize çıkarak kaybolur (DepartDuration). Ölüm/devam ile başlarken tekne yoktur. Figürler: ANLSeatedFigure (bSeated=false ayakta, SetHandTargetsWorld, SetWave).
 Yol fenerleri (NLGuideLanterns): ışık mum gibi yumuşak dalgalanır, hiç sönmez (FlickerStrength); alev boy atar, fener rüzgârda hafifçe sallanır. Test: `NLDebugIntroShots` (`-NLIntro` ile), `NLDebugGuideShots`, `NLDebugGenShots`.
+
+## Soğuk ve elektrikli soba (NLPlayerCold.cpp, ANLHeater, NLHUDCold.cpp)
+- Dışarıda (başın üstünde çatı ve çevrede duvar yok) geçen süre birikir: 60 sn (`ColdGraceTime`) sonra ekran kenarlarından soluk kırağı büyür, renkler hafifçe solar, bakış titrer, buz çıtırtısı duyulur (`frost_crackle_loop`, eşiklerde `frost_crack`). 15 sn daha (`FreezeDelay`) dışarıda kalınca donmaya başlar: hız `FreezeRampTime` içinde `FreezeMinSpeed`'e düşer, Runner uzaktan çığlık atıp gelir (`ANLGameMode::RequestColdRunner` -> `ANLRunner::PrepareColdHunt`). Yetişemezsen yakalar; bir binaya girer ya da ısınırsan vazgeçer.
+- İçeride (çatı altı) soğuk birikmez; çalışan sobanın yanında (`WarmRadius` 430 cm, arada duvar yok) hızla ısınır (`HeaterWarmRate`). Ekranda yazı / gösterge yok: buzun kendisi uyarıdır.
+- Soğuk o gece oyuncu ilk kez bir binaya girince başlar (1. gece rıhtımdan yürüyüşte işlemez).
+- Soba (ANLHeater, model `blender_heater.py` -> SM_NL_Heater, MI_NL_HeaterPaint / MI_NL_HeaterGlow): deniz feneri evinin kule tarafı duvarının önüne ANLLighthouse koyar (`bHeater`). Elektrik varken çubuklar kızarır, turuncu ışık ve uğultu; elektrik gidince söner ve ısıtmaz.
+- Test: `NLDebugCold 1` (dışarıda üşüme, donma, Runner, eve dönüp ısınma; ekran görüntüleri), `NLDebugSetCold <sn>`.

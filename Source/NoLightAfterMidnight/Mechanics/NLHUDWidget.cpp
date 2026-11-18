@@ -154,6 +154,7 @@ void UNLHUDWidget::BuildDefaultLayout()
 	}
 	FuelCanText = MakeText(Root, TEXT("FuelCanText"), TEXT("Carrying fuel can"), 16, FVector2D(0, 1), FVector2D(0, 1), FVector2D(40, -60), Dim);
 	BuildStaminaGauge(Root);
+	BuildColdOverlay(Root);
 	FlashlightBar = MakeBar(Root, TEXT("FlashlightBar"), FVector2D(0, 1), FVector2D(0, 1), FVector2D(40, -34), FVector2D(160, 12), FLinearColor(1.f, 0.85f, 0.4f));
 
 	// ---- Tamir mini oyunu ----
@@ -633,6 +634,7 @@ void UNLHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 	SetShown(FlashlightBar, !bSeated && Player->GetFlashlight() && Player->GetFlashlight()->IsOn());
 	SetShown(FlashlightLabel, !bSeated);
 	TickStaminaGauge(InDeltaTime, Player);
+	TickColdOverlay(InDeltaTime, Player);
 
 	// --- Kamera arayüzü ---
 	const bool bAtMonitor = Player->IsAtMonitor();

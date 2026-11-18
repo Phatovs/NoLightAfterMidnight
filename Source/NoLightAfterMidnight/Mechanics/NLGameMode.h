@@ -33,6 +33,10 @@ public:
 	// Jeneratör tamirinde hata yapılınca çağrılır
 	UFUNCTION(BlueprintCallable, Category = "NL|Game")
 	void RequestRunnerChase(ANLPlayerCharacter* Target);
+	// Oyuncu dışarıda donuyor: Runner uzaktan çığlık atıp gelir (true: biri geliyor ya da zaten kovalıyor)
+	bool RequestColdRunner(ANLPlayerCharacter* Target);
+	// Donma çığlığından sonra koşmaya başlamadan önceki bekleme (sn)
+	UPROPERTY(EditAnywhere, Category = "NL|Cold") float ColdRunnerDelay = 4.f;
 
 	// Test: konsola "NLDebugRunner" yaz -> Runner hemen oyuncuyu kovalar
 	UFUNCTION(Exec)

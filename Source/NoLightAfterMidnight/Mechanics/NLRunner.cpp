@@ -109,6 +109,21 @@ void ANLRunner::Tick(float DeltaSeconds)
 	// Kapının dışında zorluyor (kapı aktörü yönetir)
 	if (bDoorAssault) return;
 
+	// Soğuk avı: oyuncu bir binaya girdi ya da ısındı -> vazgeçer
+	if (bColdHunt && (bPendingChase || bChasing))
+	{
+		const ANLPlayerCharacter* T = ChaseTarget.Get();
+		if (T && (T->IsSheltered() || !T->IsFreezing()))
+		{
+			UE_LOG(LogNLRunner, Log, TEXT("Runner cold hunt: player reached shelter/warmth, retreating"));
+			if (bChasing) UGameplayStatics::PlaySoundAtLocation(this, RetreatSound, GetActorLocation());
+			bPendingChase = false;
+			bColdHunt = false;
+			StopChase();
+			return;
+		}
+	}
+
 	// Bekliyor: oyuncu tamirden (ya da başka bir işten) çıkınca koşmaya başla
 	if (bPendingChase)
 	{
@@ -194,6 +209,14 @@ void ANLRunner::PrepareAmbush(ANLPlayerCharacter* Target, float Delay, float Min
 		*PendingSpawn.GetLocation().ToCompactString(), FVector::Dist(PendingSpawn.GetLocation(), Target->GetActorLocation()));
 }
 
+void ANLRunner::PrepareColdHunt(ANLPlayerCharacter* Target, float Delay, float MinDistance, float MaxDistance)
+{
+	if (bChasing || bPendingChase || bDoorAssault || !Target) return;
+	PrepareAmbush(Target, Delay, MinDistance, MaxDistance);
+	bColdHunt = bPendingChase;
+	UE_LOG(LogNLRunner, Log, TEXT("Runner cold hunt: player is freezing outside"));
+}
+
 FTransform ANLRunner::FindSpawnPoint(const ANLPlayerCharacter* Target) const
 {
 	return FindSpawnPoint(Target, SpawnMinDistance, SpawnMaxDistance);
@@ -268,6 +291,7 @@ void ANLRunner::StopChase()
 {
 	if (bChasing) UE_LOG(LogNLRunner, Log, TEXT("Runner chase ended"));
 	bChasing = false;
+	bColdHunt = false;
 	ChaseTarget.Reset();
 	if (AAIController* AI = Cast<AAIController>(GetController()))
 	{

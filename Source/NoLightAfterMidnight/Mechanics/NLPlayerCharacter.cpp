@@ -169,6 +169,14 @@ ANLPlayerCharacter::ANLPlayerCharacter()
 	ExhaustedBreathAudio->bAutoActivate = false;
 	ExhaustedBreathAudio->bAllowSpatialization = false;
 
+	// Donma: buz tutarken gelen çıtırtı (2D)
+	FrostAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("FrostAudio"));
+	FrostAudio->SetupAttachment(GetCapsuleComponent());
+	FrostAudio->bAutoActivate = false;
+	FrostAudio->bAllowSpatialization = false;
+	NL_DEFAULT_SOUND(FrostCrackleLoop, "frost_crackle_loop");
+	NL_DEFAULT_SOUND(FrostCrackSound, "frost_crack");
+
 	bUseControllerRotationYaw = true;
 
 	// Varsayılan: arayüzü tamamen C++'ta kuran HUD. İsterseniz kendi WBP'nizi atayabilirsiniz.
@@ -190,6 +198,7 @@ void ANLPlayerCharacter::BeginPlay()
 	BodyRig->SetHeldCan(CarryCanPivot);
 	if (PantingLoop) PantingAudio->SetSound(PantingLoop);
 	if (ExhaustedBreathLoop) ExhaustedBreathAudio->SetSound(ExhaustedBreathLoop);
+	if (FrostCrackleLoop) FrostAudio->SetSound(FrostCrackleLoop);
 }
 
 void ANLPlayerCharacter::PossessedBy(AController* NewController)
@@ -443,6 +452,7 @@ void ANLPlayerCharacter::Tick(float DeltaSeconds)
 	}
 
 	UpdateStamina(DeltaSeconds);
+	UpdateCold(DeltaSeconds);
 	// Ayarlar: görüş açısı
 	if (const UNLGameSubsystem* Sub = UNLGameSubsystem::Get(this))
 	{
@@ -2417,7 +2427,7 @@ void ANLPlayerCharacter::UpdateStamina(float DeltaSeconds)
 
 	if (Mode == ENLPlayerMode::Walking || Mode == ENLPlayerMode::HoldingDoor)
 	{
-		const float Target = (bSprinting ? SprintSpeed : WalkSpeed) * (bHasFuelCan ? CarryCanSpeedMultiplier : 1.f);
+		const float Target = (bSprinting ? SprintSpeed : WalkSpeed) * (bHasFuelCan ? CarryCanSpeedMultiplier : 1.f) * GetColdSpeedMultiplier();
 		UCharacterMovementComponent* Move = GetCharacterMovement();
 		Move->MaxWalkSpeed = FMath::FInterpTo(Move->MaxWalkSpeed, Target, DeltaSeconds, bSprinting ? 5.f : 3.f);
 	}
@@ -2469,17 +2479,19 @@ void ANLPlayerCharacter::UpdateStamina(float DeltaSeconds)
 
 	// İçe çekişte (nefesin başı) gri, verişte normale döner
 	const float Gray = ExhaustAlpha * FMath::SmoothStep(0.f, 1.f, 0.5f + 0.5f * FMath::Cos(2.f * PI * (ExhaustPhase - 0.18f)));
-	const float Sat = FMath::Lerp(1.f, ExhaustedSaturation, Gray);
-	if (FMath::Abs(Sat - AppliedSaturation) > 0.003f)
+	// Soğuk: renkler solar ve maviye kayar
+	const float Sat = FMath::Lerp(1.f, ExhaustedSaturation, Gray) * FMath::Lerp(1.f, 0.78f, ColdFx);
+	if (FMath::Abs(Sat - AppliedSaturation) > 0.003f || FMath::Abs(ColdFx - AppliedColdFx) > 0.003f)
 	{
 		AppliedSaturation = Sat;
+		AppliedColdFx = ColdFx;
 		FPostProcessSettings& PP = FirstPersonCamera->PostProcessSettings;
 		PP.bOverride_ColorSaturation = Sat < 0.999f;
 		PP.ColorSaturation = FVector4(Sat, Sat, Sat, 1.f);
 		// Gri anlarda hafif kararma da olsun ki fark belli olsun
-		PP.bOverride_ColorGain = Sat < 0.999f;
 		const float Gain = FMath::Lerp(1.f, 0.82f, Gray);
-		PP.ColorGain = FVector4(Gain, Gain, Gain, 1.f);
+		PP.bOverride_ColorGain = Sat < 0.999f || ColdFx > 0.001f;
+		PP.ColorGain = FVector4(Gain * (1.f - 0.08f * ColdFx), Gain * (1.f - 0.02f * ColdFx), Gain * (1.f + 0.05f * ColdFx), 1.f);
 		FirstPersonCamera->PostProcessBlendWeight = 1.f;
 	}
 }

@@ -191,6 +191,41 @@ public:
 	// Şu an bakılan (E menzilindeki) etkileşimli nesne
 	AActor* GetFocusedActor() const { return FocusedActor.Get(); }
 
+	// --- Soğuk (NLPlayerCold.cpp) ---
+	// Dışarıda (başının üstünde çatı yok) geçen süre birikir: ColdGraceTime sonra üşür (ekran buzlanmaya başlar),
+	// FreezeDelay daha sonra donmaya başlar (yavaşlar, Runner gelir). İçeride birikmez; çalışan sobanın yanında hızla ısınır.
+	bool IsSheltered() const { return bSheltered; }
+	bool IsNearHeater() const { return bNearHeater; }
+	bool IsFreezing() const { return ColdExposure >= ColdGraceTime + FreezeDelay; }
+	bool IsGettingCold() const { return ColdExposure >= ColdGraceTime; }
+	// 0: sıcak .. 1: tamamen donmuş (arayüzdeki buz)
+	float GetColdAlpha() const;
+	// 1: tam sıcak .. 0: donma eşiği (vücut ısısı göstergesi)
+	float GetBodyHeat() const { return 1.f - FMath::Clamp(ColdExposure / FMath::Max(ColdGraceTime + FreezeDelay, 1.f), 0.f, 1.f); }
+	float GetColdSpeedMultiplier() const;
+	bool IsColdActive() const { return bColdArmed && bColdRunning; }
+	// Test: dışarıda bekle (donma, Runner), sonra eve koş ve sobada ısın; ekran görüntüleri
+	UFUNCTION(Exec) void NLDebugCold(float TimeScale);
+	// Test: soğuk birikimini doğrudan ayarla (sn)
+	UFUNCTION(Exec) void NLDebugSetCold(float Seconds);
+
+	UPROPERTY(EditAnywhere, Category = "NL|Cold") bool bColdEnabled = true;
+	UPROPERTY(EditAnywhere, Category = "NL|Cold") float ColdGraceTime = 60.f;
+	UPROPERTY(EditAnywhere, Category = "NL|Cold") float FreezeDelay = 15.f;
+	// Donmaya başladıktan sonra en yavaş hale gelme süresi (sn) ve en düşük hız çarpanı
+	UPROPERTY(EditAnywhere, Category = "NL|Cold") float FreezeRampTime = 25.f;
+	UPROPERTY(EditAnywhere, Category = "NL|Cold", meta = (ClampMin = "0.1", ClampMax = "1")) float FreezeMinSpeed = 0.42f;
+	// Sobanın yanında ısınma hızı (biriken soğuk saniyesi / sn)
+	UPROPERTY(EditAnywhere, Category = "NL|Cold") float HeaterWarmRate = 8.f;
+	// Sobasız içeride (çatı altı) yavaş ısınma (0 = sadece durur)
+	UPROPERTY(EditAnywhere, Category = "NL|Cold") float ShelterWarmRate = 0.f;
+	// Donarken Runner gelmezse / vazgeçerse tekrar çağırma aralığı (sn)
+	UPROPERTY(EditAnywhere, Category = "NL|Cold") float ColdRunnerRetry = 25.f;
+	// Buz tutarken çıtırtı (döngü: buz büyürken duyulur) ve donmaya başlarken / ara ara buz çatlaması
+	UPROPERTY(EditAnywhere, Category = "NL|Cold") TObjectPtr<USoundBase> FrostCrackleLoop;
+	UPROPERTY(EditAnywhere, Category = "NL|Cold") TObjectPtr<USoundBase> FrostCrackSound;
+	UPROPERTY(EditAnywhere, Category = "NL|Cold") float FrostVolume = 0.55f;
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -327,7 +362,25 @@ private:
 	float ExhaustPhase = 0.f;
 	bool bWasExhausted = false;
 	float AppliedSaturation = 1.f;
+	float AppliedColdFx = 0.f;
 	void UpdateStamina(float DeltaSeconds);
+
+	// Soğuk
+	float ColdExposure = 0.f;
+	float ColdFx = 0.f;            // ekran (mavi, soluk) yumuşatılmış
+	float ColdCheckTimer = 0.f;
+	float ColdRunnerTimer = 0.f;
+	float ShiverPhase = 0.f;
+	bool bSheltered = true;
+	bool bNearHeater = false;
+	bool bColdArmed = false;       // ilk kez bir binaya girene kadar (1. gece rıhtımdan yürüyüş) soğuk işlemez
+	bool bColdRunning = false;     // gece sürüyor, oyuncu oynuyor
+	bool bWasFreezing = false;
+	bool bWasCold = false;
+	float FrostVol = 0.f;
+	float FrostCrackTimer = 0.f;
+	UPROPERTY(VisibleAnywhere, Category = "NL|Components") TObjectPtr<class UAudioComponent> FrostAudio;
+	void UpdateCold(float DeltaSeconds);
 
 	float FlashAim = 0.f;
 	float WorkAlpha = 0.f;

@@ -199,6 +199,20 @@ void ANLGameMode::RequestRunnerChase(ANLPlayerCharacter* Target)
 	}
 }
 
+bool ANLGameMode::RequestColdRunner(ANLPlayerCharacter* Target)
+{
+	if (!Target || bGameOver) return false;
+	ANLRunner* Free = nullptr;
+	for (TActorIterator<ANLRunner> It(GetWorld()); It; ++It)
+	{
+		if (It->IsChasing()) return true;   // zaten biri geliyor
+		if (!Free) Free = *It;
+	}
+	if (!Free) return false;
+	Free->PrepareColdHunt(Target, ColdRunnerDelay, 1500.f, 2800.f);
+	return true;
+}
+
 void ANLGameMode::NLDebugRunner()
 {
 	ANLPlayerCharacter* Player = Cast<ANLPlayerCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));

@@ -161,6 +161,12 @@ private:
 	float DiagWidth = 330.f;
 	void BuildDiagPanel(UCanvasPanel* Root);
 
+	// Soğuk (NLHUDCold.cpp): kenarlardan büyüyen soluk kırağı
+	UPROPERTY(Transient) TObjectPtr<UImage> FrostOverlay;
+	float ColdShown = 0.f;
+	void BuildColdOverlay(UCanvasPanel* Root);
+	void TickColdOverlay(float InDeltaTime, const class ANLPlayerCharacter* Player);
+
 	// İlk gece: "Get to the lighthouse" hedefi (fenere varınca kaybolur)
 	UPROPERTY(Transient) TObjectPtr<UTextBlock> ObjectiveText;
 	float ObjectiveAlpha = 0.f;

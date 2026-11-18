@@ -34,6 +34,8 @@ public:
 	void PrepareChase(ANLPlayerCharacter* Target);
 	// Pusu (rastgele olay): uzakta belirir, çığlık atar (oyuncunun her yerden duyacağı şekilde), Delay saniye sonra kovalamaya başlar
 	void PrepareAmbush(ANLPlayerCharacter* Target, float Delay, float MinDistance, float MaxDistance);
+	// Soğuk: oyuncu dışarıda donmaya başladı. Pusu gibi uzaktan gelir; oyuncu bir binaya girer ya da ısınırsa vazgeçer.
+	void PrepareColdHunt(ANLPlayerCharacter* Target, float Delay, float MinDistance, float MaxDistance);
 	// Hemen kovala (From: başlangıç noktası)
 	void StartChase(ANLPlayerCharacter* Target, const FTransform& From);
 	void StopChase();
@@ -88,6 +90,7 @@ private:
 	bool bChasing = false;
 	bool bPendingChase = false;
 	bool bDoorAssault = false;
+	bool bColdHunt = false;
 	FTransform PendingSpawn;
 	FTransform FindSpawnPoint(const ANLPlayerCharacter* Target) const;
 	FTransform FindSpawnPoint(const ANLPlayerCharacter* Target, float MinDistance, float MaxDistance) const;

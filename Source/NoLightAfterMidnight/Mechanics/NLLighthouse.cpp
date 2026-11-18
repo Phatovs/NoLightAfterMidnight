@@ -1,5 +1,6 @@
 #include "NLLighthouse.h"
 #include "NLSwingDoor.h"
+#include "NLHeater.h"
 #include "Kismet/GameplayStatics.h"
 #include "NLEnvKit.h"
 #include "NLPowerSubsystem.h"
@@ -385,4 +386,18 @@ void ANLLighthouse::SpawnDoors()
 	const float DoorA = 300.f;
 	const FVector Hinge = FRotator(0.f, DoorA, 0.f).RotateVector(FVector(245.f * Sxy, -58.f, 0.f)) + FVector(0.f, 0.f, FloorZ);
 	Make(TowerDoorMesh, Hinge, DoorA + 90.f, 90.f);
+
+	// Elektrikli soba: kule tarafı duvarın önünde (duvar iç yüzü X 270; sobanın prizi arkasında), odaya bakar
+	if (bHeater)
+	{
+		FActorSpawnParameters SP;
+		SP.Owner = this;
+		SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		const FTransform T = FTransform(FRotator(0.f, 0.f, 0.f), FVector(292.f, -95.f, FloorZ + 4.f)) * GetActorTransform();
+		if (ANLHeater* H = GetWorld()->SpawnActor<ANLHeater>(ANLHeater::StaticClass(), T, SP))
+		{
+			H->AttachToComponent(Root, FAttachmentTransformRules::KeepWorldTransform);
+			Heater = H;
+		}
+	}
 }
